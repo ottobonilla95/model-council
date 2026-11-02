@@ -1,0 +1,10 @@
+.venv/
+.env
+data/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+frontend/node_modules/
+frontend/dist/
+*.pyc
+**/.impeccable/hook.cache.json
