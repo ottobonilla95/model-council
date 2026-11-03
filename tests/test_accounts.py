@@ -69,15 +69,22 @@ def test_user_cannot_read_export_stream_append_or_cancel_another_users_chat(clie
     assert client.get(f"/api/runs/{run_id}/export").json()["result"]["answer"] == "ONLY ONE CAN SEE THIS"
 
 
-def test_only_configured_owner_claims_old_chats_even_if_someone_else_registers_first(client):
-    _, legacy = storage.create_run(RunRequest(**body()))
-    other = google()
-    assert other["role"] == "user"
-    assert not storage.owns_session(legacy, other["id"])
+def test_legacy_chats_stay_out_of_signed_in_history(client):
+    legacy_run, legacy = storage.create_run(RunRequest(**body()))
     owner = google("owner@gmail.com", "owner-sub")
-    assert owner["role"] == "admin"
-    assert storage.owns_session(legacy, owner["id"])
-    assert not storage.sessions(other["id"])
+    sign_in(client, owner)
+    assert client.get("/api/sessions").json() == []
+
+    _, current = storage.create_run(RunRequest(**body()), owner["id"])
+    # Simulate the previous release assigning the anonymous chat to the owner.
+    with storage.connection() as db:
+        storage.query(db, "UPDATE sessions SET owner_id=? WHERE id=?", (owner["id"], legacy))
+    storage.init()
+    google("owner@gmail.com", "owner-sub")
+    assert [row["id"] for row in client.get("/api/sessions").json()] == [current]
+    assert client.get(f"/api/sessions/{legacy}").status_code == 404
+    assert client.get(f"/api/runs/{legacy_run}/export").status_code == 404
+    assert storage.owns_session(legacy, None)
 
 
 def test_admin_create_user_verified_link_disable_revoke_and_role_protection(client):

@@ -80,10 +80,6 @@ def from_google(info):
         if email == owner_email():
             storage.query(db, "UPDATE users SET role='admin' WHERE id=?", (user_id,))
         row = storage.query(db, "SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-        if email == owner_email():
-            # Existing anonymous conversations belong only to the explicitly configured
-            # owner, never whichever person happens to register first.
-            storage.query(db, "UPDATE sessions SET owner_id=? WHERE owner_id IS NULL", (user_id,))
         return public_user(row)
 
 

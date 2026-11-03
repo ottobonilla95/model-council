@@ -82,6 +82,13 @@ def init():
         from .memory import init_tables as init_memory
 
         init_tables(db)
+        # Older releases assigned anonymous conversations to the owner. A session
+        # predating its assigned account could not have been created by that account.
+        query(
+            db,
+            "UPDATE sessions SET owner_id=NULL WHERE EXISTS ("
+            "SELECT 1 FROM users WHERE users.id=sessions.owner_id AND sessions.created<users.created)",
+        )
         init_memory(db)
         if postgres:
             for name, kind in (("job_token", "TEXT"), ("lease_until", "DOUBLE PRECISION")):
