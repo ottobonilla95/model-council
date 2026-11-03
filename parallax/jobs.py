@@ -51,6 +51,11 @@ async def process_run(run_id):
                     raise storage.LeaseLostError("Research ownership changed.")
                 return
             await task
+    except storage.LeaseLostError:
+        if storage.get_run(run_id)["status"] == "running":
+            raise
+        # A user cancellation is already persisted by the API; acknowledge its queue message.
+        return
     except TimeoutError:
         storage.finish(
             run_id,

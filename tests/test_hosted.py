@@ -138,3 +138,19 @@ def test_queue_publish_failure_is_visible_and_not_left_running(db, monkeypatch):
         saved = storage.session_runs(storage.sessions()[0]["id"])[0]
         assert saved["status"] == "failed"
         assert "private" not in str(storage.events(saved["id"]))
+
+
+@pytest.mark.asyncio
+async def test_cancellation_in_another_instance_cannot_be_overwritten(db):
+    import asyncio
+
+    run_id, _ = storage.create_run(request())
+    task = asyncio.create_task(process_run(run_id))
+    for _ in range(100):
+        if storage.events(run_id):
+            break
+        await asyncio.sleep(0.01)
+    storage.finish(run_id, "cancelled", terminal={"type": "cancelled"})
+    await asyncio.wait_for(task, 6)
+    assert storage.get_run(run_id)["status"] == "cancelled"
+    assert not any(e["payload"]["type"] == "done" for e in storage.events(run_id))
