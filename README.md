@@ -2,7 +2,7 @@
 
 [Source repository](https://github.com/ottobonilla95/parallax)
 
-A conversational assistant that answers everyday messages directly and automatically brings in 2–4 independent researchers when a question needs current sources or multiple perspectives. One reply stays in the chat; sources, original answers and disagreements are expandable.
+A conversational assistant that answers everyday messages directly and automatically brings in 1–4 independent researchers when a question needs current sources or multiple perspectives. One reply stays in the chat; sources, original answers and disagreements are expandable.
 
 Built with **Deep Agents, LangGraph, OpenRouter, FastAPI and a Vite interface**. This uses our own research harness around API models; it does not reproduce the consumer ChatGPT, Claude.ai or Grok applications.
 
@@ -21,7 +21,7 @@ To start chatting:
 
 1. Open **Settings** and save an [OpenRouter key](https://openrouter.ai/settings/keys).
 2. Send a message. **Auto** is the default: greetings and ordinary questions get a direct reply from the selected chat model. Questions needing current information go to the research team.
-3. Use message options to choose **Chat** (no search), **Research** (always use the team), research depth or shared context. Configure the 2–4 research models and comparison model in Settings.
+3. Use message options to choose **Chat** (no search), **Research** (always use the team), research depth or shared context. Use **Models** below the input to search the live OpenRouter catalog, filter by provider, and select 1–4 models. Click a badge to choose the everyday chat model; use its × to remove it. At least one remains selected. The picker includes tool-capable models from providers such as OpenAI, Anthropic, Google, Qwen, and DeepSeek. Choices are saved per account in this browser. A single researcher returns its answer directly; two or more use the comparison model configured under Settings → Connections & comparison.
 
 OpenRouter also supplies web search through its [web search server tool](https://openrouter.ai/docs/guides/features/server-tools/web-search), so no additional search key is required. [Tavily](https://app.tavily.com) remains an optional alternative. Missing credentials produce an actionable error; the interface never silently switches to sample responses. Legacy Demo rounds remain labeled in saved history, and the internal demo API is retained for tests.
 

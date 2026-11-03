@@ -8,7 +8,7 @@ class RunRequest(BaseModel):
     question: str = Field(min_length=1, max_length=12000)
     context: str = Field(default="", max_length=12000)
     session_id: str | None = None
-    models: list[str] = Field(min_length=2, max_length=4)
+    models: list[str] = Field(min_length=1, max_length=4)
     judge: str = Field(min_length=3, max_length=180)
     depth: Literal["standard", "deep"] = "standard"
     mode: Literal["auto", "chat", "research"] = "auto"

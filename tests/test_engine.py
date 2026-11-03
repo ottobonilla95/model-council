@@ -272,3 +272,27 @@ async def test_same_scratch_filename_is_private_to_each_researcher():
         assert report["status"] == "partial"
         assert request.models[index] in report["answer"]
         assert request.models[1 - index] not in report["answer"]
+
+
+@pytest.mark.asyncio
+async def test_single_researcher_runs_tools_and_returns_answer_without_judge():
+    events, called = [], []
+
+    async def emit(event):
+        events.append(event)
+
+    def factory(model_id, key):
+        called.append(model_id)
+        assert model_id == "test/solo", "A single researcher must not call the comparison model"
+        return ScriptedModel(model_id=model_id)
+
+    request = RunRequest(mode="research", question="Find evidence", models=["test/solo"], judge="test/unused")
+    result = await ParallaxEngine(
+        request, "single", emit, {"openrouter": "fake", "tavily": "fake"}, factory=factory, web_factory=FakeWeb
+    ).run()
+    assert called == ["test/solo"]
+    assert result["comparison"]["answer"] == "PRIVATE FINDING FROM test/solo"
+    assert result["reports"][0]["sources"][0]["read"]
+    assert not result["comparison"]["agreements"]
+    assert not any(e["type"] == "comparison_start" for e in events)
+    assert any("one model" in note for note in result["comparison"]["limitations"])

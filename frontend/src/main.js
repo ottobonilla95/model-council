@@ -25,7 +25,9 @@ let sending = false;
 let prefs;
 try { prefs = JSON.parse(localStorage.getItem('parallax-preferences') || '{}'); } catch { prefs = {}; }
 let selected = prefs.models || [];
-let modelSlots = prefs.slots || [];
+let modelNames = prefs.modelNames || {};
+let catalog = null;
+let catalogRequest = null;
 let judge = prefs.judge || '';
 let mode = prefs.mode || 'auto';
 let chatModel = prefs.chatModel || '';
@@ -50,14 +52,15 @@ async function api(path, options = {}) {
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
 function savePrefs() {
-  localStorage.setItem(prefsKey, JSON.stringify({ models: selected, slots: modelSlots, judge, depth, context, mode, chatModel }));
+  localStorage.setItem(prefsKey, JSON.stringify({ models: selected, modelNames: Object.fromEntries(selected.map(id => [id, identity(id).name])), judge, depth, context, mode, chatModel }));
 }
 function identity(id) {
   const provider = id.split('/')[0];
-  const known = config.models.find(m => m.id === id);
+  const known = catalog?.models.find(m => m.id === id);
+  const fallbackName = id.split('/').slice(1).join('/').replace(/-/g, ' ').replace(/\b[a-z]/g, c => c.toUpperCase()).replace(/\bGpt\b/g, 'GPT').replace(/\bDeepseek\b/g, 'DeepSeek');
   const map = { openai: ['GPT', 'green'], anthropic: ['Claude', 'orange'], 'x-ai': ['Grok', 'blue'], google: ['Gemini', 'purple'] };
   const [name, color] = map[provider] || [provider, 'gray'];
-  return known || { id, name, color };
+  return { id, name: known?.name?.replace(/^[^:]+: /, '') || modelNames[id] || fallbackName || name, color };
 }
 function modelChip(id, small = false) {
   const m = identity(id);
@@ -128,18 +131,17 @@ function syncNavigation() {
 function renderComposer() {
   const container = document.querySelector('#composer');
   if (!container) return;
-  const models = [...new Set([...modelSlots, ...selected, chatModel])].filter(Boolean);
   container.innerHTML = `<div class="composer-panel"><form class="composer ${running() ? 'busy' : ''}" id="question-form">
     <label class="sr-only" for="question">Your message</label>
     <textarea id="question" rows="${current ? 1 : 2}" maxlength="12000" placeholder="${current ? 'Reply to Parallax…' : 'Ask anything…'}" ${running() ? 'disabled' : ''}>${esc(draft)}</textarea>
-    <div class="composer-controls"><div class="composer-left"><label class="chat-model-picker"><span class="sr-only">Chat model</span><select id="chat-model" aria-label="Chat model" ${running() ? 'disabled' : ''}>${models.map(id => `<option value="${esc(id)}" ${id === chatModel ? 'selected' : ''}>${esc(identity(id).name)}</option>`).join('')}</select>${ico('chevron-down')}</label><details class="research-options"><summary aria-label="Chat options" title="Chat options">${ico('settings-2')}<span class="options-label">${mode === 'auto' ? 'Auto' : mode === 'chat' ? 'Chat' : 'Research'}</span></summary><div class="options-panel">
+    <div class="composer-controls"><div class="composer-left"><details class="research-options"><summary aria-label="Chat options" title="Chat options">${ico('settings-2')}<span class="options-label">${mode === 'auto' ? 'Auto' : mode === 'chat' ? 'Chat' : 'Research'}</span></summary><div class="options-panel">
       <label class="depth-select">Mode<select id="mode" aria-label="Response mode" ${running() ? 'disabled' : ''}><option value="auto" ${mode === 'auto' ? 'selected' : ''}>Auto — search when needed</option><option value="chat" ${mode === 'chat' ? 'selected' : ''}>Chat — no web search</option><option value="research" ${mode === 'research' ? 'selected' : ''}>Research — use the team</option></select></label>
       <button type="button" class="composer-option" data-action="context">${ico('plus')} ${context ? 'Edit context' : 'Add context'}</button>
       <label class="depth-select">Research depth<select id="depth" aria-label="Research depth" ${running() ? 'disabled' : ''}><option value="standard" ${depth === 'standard' ? 'selected' : ''}>Standard</option><option value="deep" ${depth === 'deep' ? 'selected' : ''}>Deeper</option></select></label>
       <button type="button" class="composer-option" data-action="models">${ico('layers-3')} Research team (${selected.length} models)</button>
       ${current ? `<button type="button" class="fresh-toggle ${fresh ? 'on' : ''}" data-action="fresh" aria-pressed="${fresh}">${ico('rotate-ccw')} Skip conversation history</button>` : ''}
     </div></details></div><span class="composer-shortcut"><kbd>Enter</kbd> to send</span>${running() ? `<button class="send-button stop" type="button" data-action="stop" aria-label="Stop response">${ico('square')}</button>` : `<button class="send-button" type="submit" aria-label="Send message" ${sending || !draft.trim() ? 'disabled' : ''}>${ico(sending ? 'loader-circle' : 'arrow-up', sending ? 'spin' : '')}</button>`}</div>
-  </form></div>`;
+  </form></div><div class="composer-models" aria-label="Selected models">${selected.map(id => `<span class="selected-model ${id === chatModel ? 'is-chat-model' : ''}"><button type="button" data-chat-model="${esc(id)}" aria-pressed="${id === chatModel}" aria-label="Use ${esc(identity(id).name)} for chat" title="${esc(id)} · Click to use for chat" ${running() || sending ? 'disabled' : ''}>${modelChip(id, true)}${id === chatModel ? '<span class="chat-role">Chat</span>' : ''}</button><button type="button" class="remove-model" data-remove-model="${esc(id)}" aria-label="Remove ${esc(identity(id).name)}" title="${selected.length === 1 ? 'Keep at least one model' : 'Remove model'}" ${selected.length === 1 || running() || sending ? 'disabled' : ''}>${ico('x')}</button></span>`).join('')}<button type="button" class="add-models" id="manage-models" data-action="models" ${running() || sending ? 'disabled' : ''}>${ico('plus')} Models</button></div><p class="model-selection-hint">${selected.length === 1 ? 'One model for chat and research.' : 'Chat with one. Research with all.'}</p>`;
   const textarea = container.querySelector('textarea');
   textarea.style.height = `${Math.min(textarea.scrollHeight, 190)}px`;
   decorate();
@@ -150,7 +152,7 @@ function researchDetails(run) {
   const reports = Object.values(run.reports);
   const sources = sourceList(run);
   const comparison = run.comparison;
-  return `<details class="research-evidence" data-evidence="${run.id}"><summary>${ico('search')} Research details (${reports.length} models, ${sources.length} sources) ${ico('chevron-down')}</summary><div class="evidence-body">${sources.length ? `<h3>Sources</h3><ol class="chat-sources">${sources.map(s => `<li><a href="${esc(safeURL(s.url))}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a><small>${esc(hostname(s.url))} · ${s.read ? 'Page read' : run.request.demo ? 'Example reference' : 'Search excerpt'}</small></li>`).join('')}</ol>` : ''}${reports.length ? `<h3>Independent answers</h3>${reports.map(r => `<details class="original-answer"><summary>${modelChip(r.model)} <span>${r.status === 'completed' ? 'View answer' : esc(r.status)}</span>${ico('chevron-down')}</summary><article class="markdown">${md(r.answer)}</article>${r.error ? `<p class="answer-note">${esc(r.error)}</p>` : ''}</details>`).join('')}` : ''}${comparison ? ['agreements','disagreements'].map(key => comparison[key]?.length ? `<h3>${key === 'agreements' ? 'Where the models agree' : 'Where they differ'}</h3>${comparison[key].map(p => `<p><strong>${esc(p.claim)}</strong><br>${esc(p.detail)}</p>`).join('')}` : '').join('') : ''}${comparison?.limitations?.length ? `<h3>Limitations</h3>${comparison.limitations.map(p => `<p>${esc(p)}</p>`).join('')}` : ''}<a class="export-message" href="/api/runs/${run.id}/export" download>${ico('download')} Export details</a></div></details>`;
+  return `<details class="research-evidence" data-evidence="${run.id}"><summary>${ico('search')} Research details (${reports.length} ${reports.length === 1 ? 'model' : 'models'}, ${sources.length} sources) ${ico('chevron-down')}</summary><div class="evidence-body">${sources.length ? `<h3>Sources</h3><ol class="chat-sources">${sources.map(s => `<li><a href="${esc(safeURL(s.url))}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a><small>${esc(hostname(s.url))} · ${s.read ? 'Page read' : run.request.demo ? 'Example reference' : 'Search excerpt'}</small></li>`).join('')}</ol>` : ''}${reports.length ? `<h3>${reports.length === 1 ? 'Research answer' : 'Independent answers'}</h3>${reports.map(r => `<details class="original-answer"><summary>${modelChip(r.model)} <span>${r.status === 'completed' ? 'View answer' : esc(r.status)}</span>${ico('chevron-down')}</summary><article class="markdown">${md(r.answer)}</article>${r.error ? `<p class="answer-note">${esc(r.error)}</p>` : ''}</details>`).join('')}` : ''}${comparison ? ['agreements','disagreements'].map(key => comparison[key]?.length ? `<h3>${key === 'agreements' ? 'Where the models agree' : 'Where they differ'}</h3>${comparison[key].map(p => `<p><strong>${esc(p.claim)}</strong><br>${esc(p.detail)}</p>`).join('')}` : '').join('') : ''}${comparison?.limitations?.length ? `<h3>Limitations</h3>${comparison.limitations.map(p => `<p>${esc(p)}</p>`).join('')}` : ''}<a class="export-message" href="/api/runs/${run.id}/export" download>${ico('download')} Export details</a></div></details>`;
 }
 function renderDesk() {
   const desk = document.querySelector('#desk');
@@ -279,23 +281,108 @@ function modal(content, wide = false) {
   decorate();
   return dialog;
 }
+const providerNames = { openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', 'x-ai': 'xAI', deepseek: 'DeepSeek', qwen: 'Qwen', moonshotai: 'Moonshot', minimax: 'MiniMax', 'z-ai': 'Z.ai' };
+const providerName = id => providerNames[id] || id;
+async function loadModelCatalog(retry = false) {
+  if (catalog && !retry) return catalog;
+  if (!catalogRequest) catalogRequest = api('/api/models').then(data => { catalog = data; return data; }).finally(() => { catalogRequest = null; });
+  return catalogRequest;
+}
+function tokenPrice(value) {
+  const price = Number(value);
+  return value == null || value === '' || !Number.isFinite(price) || price < 0 ? '—' : price === 0 ? 'Free' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(price * 1e6);
+}
+async function openModelPicker() {
+  if (running() || sending) return;
+  let choices = [...selected];
+  let query = '', provider = '', onlySelected = false;
+  const dialog = modal(`<div class="modal-header"><div><h2 id="model-picker-title">Your models</h2><p>One for conversation. A team when you need research.</p></div><button class="icon-button" data-close aria-label="Close model picker">${ico('x')}</button></div>
+    <div class="catalog-toolbar"><label class="catalog-search">${ico('search')}<input id="model-search" type="search" placeholder="Search models or providers…" aria-label="Search models" autofocus></label><div class="catalog-provider"><label class="sr-only" for="model-provider">Provider</label><select id="model-provider"><option value="">All providers</option></select>${ico('chevron-down')}</div></div>
+    <div class="catalog-subhead"><button type="button" class="text-button" id="selected-filter" aria-pressed="false">Selected <span id="selection-count"></span></button><span>USD / 1M tokens · input / output</span></div>
+    <div id="catalog-notice" role="status"></div><div class="catalog-list" id="catalog-list" aria-label="Available models"><p class="catalog-state">${ico('loader-circle', 'spin')} Loading the model catalog…</p></div>
+    <p id="catalog-feedback" class="catalog-feedback" role="status">Choose 1–4 models. You can mix providers.</p><div class="modal-footer catalog-footer"><span>Selection saved in this browser.</span><div><button type="button" class="text-button" data-close>Cancel</button><button type="button" class="primary-button" id="apply-models">Apply models ${ico('check')}</button></div></div>`, true);
+  dialog.classList.add('model-picker');
+  dialog.setAttribute('aria-labelledby', 'model-picker-title');
+  const list = dialog.querySelector('#catalog-list');
+  const feedback = dialog.querySelector('#catalog-feedback');
+  const count = dialog.querySelector('#selection-count');
+  let data = null;
+  const render = () => {
+    count.textContent = `${choices.length} / 4`;
+    feedback.textContent = choices.length === 4 ? 'Four selected. Remove one to add another.' : choices.length === 1 ? 'Keep at least one model selected.' : 'Choose 1–4 models. You can mix providers.';
+    if (!data) return;
+    const known = new Map(data.models.map(m => [m.id, m]));
+    // Preserve a previous choice even if the catalog no longer lists it.
+    choices.forEach(id => { if (!known.has(id)) known.set(id, { id, name: identity(id).name, unavailable: true }); });
+    const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    const matches = [...known.values()].filter(m => (!provider || m.id.split('/')[0] === provider) && (!onlySelected || choices.includes(m.id)) && terms.every(t => `${m.name} ${m.id} ${providerName(m.id.split('/')[0])}`.toLowerCase().includes(t)))
+      .sort((a,b) => Number(choices.includes(b.id)) - Number(choices.includes(a.id)) || a.name.localeCompare(b.name));
+    list.innerHTML = matches.length ? matches.map(m => {
+      const checked = choices.includes(m.id);
+      const bounded = checked ? choices.length === 1 : choices.length === 4;
+      const contextSize = Number(m.context_length);
+      const contextLabel = contextSize > 0 ? `${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(contextSize)} context` : '';
+      return `<label class="catalog-row ${checked ? 'chosen' : ''}"><input type="checkbox" value="${esc(m.id)}" aria-label="Select ${esc(m.name)}" ${checked ? 'checked' : ''} ${bounded ? 'disabled' : ''}><span class="catalog-model"><strong>${esc(m.name)}</strong><small>${esc(m.id)}</small><span class="catalog-model-meta">${esc(providerName(m.id.split('/')[0]))}${contextLabel ? ` · ${contextLabel}` : ''}${m.unavailable ? ' · Not in the current catalog' : ''}</span></span><span class="catalog-price">${tokenPrice(m.pricing?.prompt)} / ${tokenPrice(m.pricing?.completion)}</span></label>`;
+    }).join('') : '<div class="catalog-state"><strong>No matching models</strong><p>Try another name or provider, or clear your filters.</p><button type="button" class="text-button" id="clear-model-filters">Clear filters</button></div>';
+    list.querySelector('#clear-model-filters')?.addEventListener('click', () => {
+      query = provider = ''; onlySelected = false;
+      dialog.querySelector('#model-search').value = '';
+      dialog.querySelector('#model-provider').value = '';
+      dialog.querySelector('#selected-filter').setAttribute('aria-pressed', 'false'); render();
+    });
+    decorate();
+  };
+  const load = async retry => {
+    try {
+      data = await loadModelCatalog(retry);
+      if (!dialog.isConnected) return;
+      dialog.querySelector('#model-provider').innerHTML = '<option value="">All providers</option>' + [...new Set(data.models.map(m => m.id.split('/')[0]))].sort((a,b) => providerName(a).localeCompare(providerName(b))).map(p => `<option value="${esc(p)}">${esc(providerName(p))}</option>`).join('');
+      const notice = dialog.querySelector('#catalog-notice');
+      notice.innerHTML = data.warning ? `${esc(data.warning)} <button type="button" class="text-button" id="retry-catalog">Retry catalog</button>` : '';
+      notice.querySelector('button')?.addEventListener('click', () => load(true));
+      render();
+    } catch {
+      if (!dialog.isConnected) return;
+      list.innerHTML = '<div class="catalog-state"><strong>Couldn’t load models</strong><p>Your selected models are safe. Check your connection and try again.</p><button type="button" class="text-button" id="retry-catalog">Try again</button></div>';
+      list.querySelector('button').onclick = () => load(true);
+    }
+  };
+  list.addEventListener('change', e => {
+    if (e.target.type !== 'checkbox') return;
+    const id = e.target.value;
+    if (e.target.checked && choices.length < 4) choices.push(id);
+    else if (!e.target.checked && choices.length > 1) choices = choices.filter(m => m !== id);
+    feedback.textContent = choices.length === 4 ? 'Four selected. Remove one to add another.' : choices.length === 1 ? 'Keep at least one model selected.' : 'Choose 1–4 models. You can mix providers.';
+    const scrollTop = list.scrollTop;
+    render(); list.scrollTop = scrollTop;
+    const nextFocus = [...list.querySelectorAll('input')].find(el => el.value === id && !el.disabled) || dialog.querySelector('#selected-filter');
+    nextFocus.focus({ preventScroll: true });
+  });
+  dialog.querySelector('#model-search').oninput = e => { query = e.target.value; render(); list.scrollTop = 0; };
+  dialog.querySelector('#model-provider').onchange = e => { provider = e.target.value; render(); list.scrollTop = 0; };
+  dialog.querySelector('#selected-filter').onclick = e => { onlySelected = !onlySelected; e.currentTarget.setAttribute('aria-pressed', String(onlySelected)); render(); list.scrollTop = 0; };
+  dialog.querySelector('#apply-models').onclick = () => {
+    selected = choices;
+    if (!selected.includes(chatModel)) chatModel = selected[0];
+    savePrefs(); dialog.close(); renderComposer(); document.querySelector('#manage-models')?.focus();
+    notify('Models updated. Click a badge to choose your chat model.');
+  };
+  render(); await load(false);
+}
+
 function openModelSettings() {
-  const dialog = modal(`<div class="modal-header"><div><h2>Models & connections</h2><p>Connect providers and manage your models.</p></div><button class="icon-button" data-close aria-label="Close settings">${ico('x')}</button></div><form id="settings-form"><section class="settings-section"><h3>Connections</h3><p>${config.managed_credentials ? 'OpenRouter connects chat and web research. Tavily is an optional search provider. Keys are managed in Vercel.' : 'OpenRouter connects chat and web research. Tavily is optional. Keys are saved locally on this app’s server.'}</p><label class="key-label">OpenRouter <span>${config.keys.openrouter ? 'Key saved' : 'No key saved'}</span><input type="password" name="openrouter" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.openrouter ? 'Saved · enter a new key to replace' : 'Paste your OpenRouter API key'}" /></label><label class="key-label">Tavily search (optional) <span>${config.keys.tavily ? 'Key saved' : 'No key saved'}</span><input type="password" name="tavily" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.tavily ? 'Saved · enter a new key to replace' : 'Paste your Tavily API key'}" /></label><div class="provider-links"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">Get an OpenRouter key ${ico('external-link')}</a><a href="https://app.tavily.com" target="_blank" rel="noreferrer">Get a Tavily key ${ico('external-link')}</a></div></section><section class="settings-section"><div class="section-title"><h3>Independent researchers</h3><span>Choose 2–4</span></div><p>Every selected model gets its own research loop and private notes.</p><div class="model-settings">${config.models.map((m, index) => { const currentId = modelSlots[index] || m.id; return `<label class="model-setting"><input type="checkbox" name="enabled-${index}" ${selected.includes(currentId) ? 'checked' : ''} />${modelChip(currentId)}<input type="text" name="model-${index}" aria-label="Researcher ${index+1} model ID" list="model-catalog" value="${esc(currentId)}" /></label>`; }).join('')}</div><datalist id="model-catalog"></datalist><label class="judge-label">Comparison model<input type="text" name="judge" list="model-catalog" value="${esc(judge)}" required /></label><p class="settings-hint">Use any tool-capable OpenRouter model ID. The comparison model can also check sources.</p></section><div id="settings-error" class="form-error" role="alert"></div><div class="modal-footer"><span>Live runs use paid API credits.</span><button class="primary-button" type="submit">Save settings ${ico('check')}</button></div></form>`, true);
-  api('/api/models').then(data => {
+  const dialog = modal(`<div class="modal-header"><div><h2>Connections & comparison</h2><p>Manage provider access and the final comparison.</p></div><button class="icon-button" data-close aria-label="Close settings">${ico('x')}</button></div><form id="settings-form"><section class="settings-section"><h3>Connections</h3><p>${config.managed_credentials ? 'OpenRouter connects chat and web research. Tavily is an optional search provider. Keys are managed in Vercel.' : 'OpenRouter connects chat and web research. Tavily is optional. Keys are saved locally on this app’s server.'}</p><label class="key-label">OpenRouter <span>${config.keys.openrouter ? 'Key saved' : 'No key saved'}</span><input type="password" name="openrouter" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.openrouter ? 'Saved · enter a new key to replace' : 'Paste your OpenRouter API key'}" /></label><label class="key-label">Tavily search (optional) <span>${config.keys.tavily ? 'Key saved' : 'No key saved'}</span><input type="password" name="tavily" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.tavily ? 'Saved · enter a new key to replace' : 'Paste your Tavily API key'}" /></label><div class="provider-links"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">Get an OpenRouter key ${ico('external-link')}</a><a href="https://app.tavily.com" target="_blank" rel="noreferrer">Get a Tavily key ${ico('external-link')}</a></div></section><section class="settings-section"><h3>Research comparison</h3><p>Choose your chat and research models using Models below the message box. With two or more researchers, this model combines their findings.</p><datalist id="model-catalog"></datalist><label class="judge-label">Comparison model<input type="text" name="judge" list="model-catalog" value="${esc(judge)}" required /></label><p class="settings-hint">Use a full tool-capable OpenRouter model ID. One researcher returns its answer directly.</p></section><div id="settings-error" class="form-error" role="alert"></div><div class="modal-footer"><span>Live runs use paid API credits.</span><button class="primary-button" type="submit">Save settings ${ico('check')}</button></div></form>`, true);
+  loadModelCatalog().then(data => {
     const list = dialog.querySelector('#model-catalog');
     if (list) list.innerHTML = data.models.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
   }).catch(() => {});
   dialog.querySelector('form').addEventListener('submit', async e => {
     e.preventDefault();
     const data = new FormData(e.target);
-    const models = config.models.map((_, i) => data.has(`enabled-${i}`) ? String(data.get(`model-${i}`)).trim() : null).filter(Boolean);
     const error = dialog.querySelector('#settings-error');
-    if (models.length < 2 || models.length > 4 || new Set(models).size !== models.length) { error.textContent = 'Choose 2–4 different models.'; return; }
-    if (models.some(m => !m.includes('/')) || !String(data.get('judge')).includes('/')) { error.textContent = 'Use full OpenRouter model IDs, such as provider/model.'; return; }
+    if (!String(data.get('judge')).includes('/')) { error.textContent = 'Use full OpenRouter model IDs, such as provider/model.'; return; }
     try {
       config = await post('/api/settings', { openrouter: data.get('openrouter') || '', tavily: data.get('tavily') || '' });
-      selected = models;
-      modelSlots = config.models.map((m, i) => String(data.get(`model-${i}`)).trim() || m.id);
       judge = String(data.get('judge')).trim();
       savePrefs();
       dialog.close();
@@ -316,6 +403,15 @@ document.addEventListener('click', async e => {
   if (session) return loadSession(session.dataset.session);
   const accessButton = e.target.closest('[data-save-user]');
   if (accessButton) { await saveUserAccess(accessButton); return; }
+  const choice = e.target.closest('[data-chat-model], [data-remove-model]');
+  if (choice && !running() && !sending) {
+    if (choice.dataset.chatModel && selected.includes(choice.dataset.chatModel)) chatModel = choice.dataset.chatModel;
+    if (choice.dataset.removeModel && selected.length > 1) {
+      selected = selected.filter(id => id !== choice.dataset.removeModel);
+      if (!selected.includes(chatModel)) chatModel = selected[0];
+    }
+    savePrefs(); renderComposer(); document.querySelector('#manage-models')?.focus(); return;
+  }
   const action = e.target.closest('[data-action]')?.dataset.action;
   switch (action) {
     case 'new': newConversation(); break;
@@ -325,7 +421,8 @@ document.addEventListener('click', async e => {
     case 'toggle-nav': mobileNav = !mobileNav; document.querySelector('.workspace').classList.toggle('nav-open', mobileNav); syncNavigation(); document.querySelector(mobileNav ? '.drawer-heading button' : '.history-toggle')?.focus(); break;
     case 'theme': toggleTheme(); break;
     case 'settings': await openPersonal(); break;
-    case 'models': openModelSettings(); break;
+    case 'models': openModelPicker(); break;
+    case 'connections': openModelSettings(); break;
     case 'reload': location.reload(); break;
     case 'context': openContext(); break;
     case 'fresh': fresh = !fresh; renderComposer(); break;
@@ -349,7 +446,7 @@ document.addEventListener('keydown', e => {
 function loadAccountPrefs() {
   prefsKey = authState.required ? `parallax-preferences:${authState.user.id}` : 'parallax-preferences';
   try { prefs = JSON.parse(localStorage.getItem(prefsKey) || '{}'); } catch { prefs = {}; }
-  selected = prefs.models || []; modelSlots = prefs.slots || []; judge = prefs.judge || '';
+  selected = prefs.models || []; modelNames = prefs.modelNames || {}; judge = prefs.judge || '';
   mode = prefs.mode || 'auto'; chatModel = prefs.chatModel || ''; depth = prefs.depth || 'standard'; context = prefs.context || '';
 }
 function accountMenu() {
@@ -410,7 +507,7 @@ function renderPersonal() {
       <p id="memory-error" class="form-error" role="alert"></p>
       ${personalData.memories.length ? '<button class="text-button forget-all" id="forget-all">Forget all memories</button><div id="forget-confirm" hidden><p>This removes saved memories. Original messages remain in your chat history.</p><button class="text-button" id="cancel-forget">Keep memories</button><button class="text-button forget-all" id="confirm-forget">Forget all</button></div>' : ''}
       <p class="settings-hint">Forgetting removes a detail from saved memory for future chats. It does not erase the messages where you originally shared it. New messages may be remembered again while learning is on.</p>
-    </section><section class="personal-section"><h2>Models & connections</h2><p class="settings-hint">Choose your research team and comparison model.</p><button class="text-button" data-action="models">Manage models ${ico('arrow-up-right')}</button></section>`;
+    </section><section class="personal-section"><h2>Models & connections</h2><p class="settings-hint">Choose models for chat and research, or manage provider access and the comparison.</p><div class="provider-links"><button class="text-button" data-action="models">Manage models ${ico('arrow-up-right')}</button><button class="text-button" data-action="connections">Connections & comparison ${ico('arrow-up-right')}</button></div></section>`;
   const form = root.querySelector('#personal-form');
   form.elements.memory_enabled.onchange = () => { form.elements.auto_memory.disabled = !form.elements.memory_enabled.checked; };
   form.onsubmit = async e => {
@@ -485,10 +582,15 @@ async function init() {
     if (authState.required && !authState.user) { renderSignIn(); return; }
     loadAccountPrefs();
     [config, sessions, personalData] = await Promise.all([api('/api/config'), api('/api/sessions'), api('/api/me/settings')]);
-    if (selected.length < 2 || selected.length > 4) selected = config.models.slice(0, 3).map(m => m.id);
-    if (modelSlots.length !== 4) modelSlots = config.models.map(m => selected.find(s => s.split('/')[0] === m.id.split('/')[0]) || m.id);
+    selected = [...new Set(Array.isArray(selected) ? selected.filter(id => typeof id === 'string' && id.includes('/')) : [])];
+    if (selected.length < 1 || selected.length > 4) selected = config.models.slice(0, 3).map(m => m.id);
     judge ||= config.judge;
     chatModel ||= config.chat_model;
+    if (!selected.includes(chatModel)) {
+      if (selected.length < 4) selected.push(chatModel);
+      else chatModel = selected[0];
+    }
+    savePrefs();
     shell();
   } catch (error) { app.innerHTML = `<div class="startup-error"><h1>Let’s reconnect.</h1><p>${esc(error.message)}</p><p>Start the local server, then refresh this page.</p><button data-action="reload">Refresh</button></div>`; }
 }

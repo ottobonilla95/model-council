@@ -242,8 +242,24 @@ class ParallaxEngine:
 
     async def compare(self, state):
         reports = sorted(state["reports"], key=lambda r: r["agent"])
-        await self.emit({"type": "comparison_start", "model": self.request.judge})
         sources = [s for report in reports for s in report["sources"]]
+        if len(reports) == 1:
+            report = reports[0]
+            result = clean_citations(
+                {
+                    "answer": report.get("answer")
+                    or "This model could not complete the research. Check its error in Research details and try again.",
+                    "agreements": [],
+                    "disagreements": [],
+                    "next_steps": [],
+                    "limitations": ["Research by one model; no independent comparison."]
+                    + ([f"{report['model']}: {report['status']}. {report.get('error') or ''}"] if report["status"] != "completed" else []),
+                },
+                sources,
+            )
+            await self.emit({"type": "comparison_done", "comparison": result, "sources": sources, "usage": {}})
+            return {"comparison": result}
+        await self.emit({"type": "comparison_start", "model": self.request.judge})
         if self.request.demo:
             from .demo import demo_comparison
 

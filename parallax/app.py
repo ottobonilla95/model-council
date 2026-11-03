@@ -100,14 +100,27 @@ async def models(user=Depends(auth.current_user)):
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get("https://openrouter.ai/api/v1/models")
             response.raise_for_status()
-        return {
+        catalog = {
             "models": [
-                {"id": m["id"], "name": m["name"]}
+                {
+                    "id": m["id"],
+                    "name": m.get("name") or m["id"],
+                    "context_length": m.get("context_length"),
+                    "pricing": m.get("pricing") or {},
+                }
                 for m in response.json()["data"]
-                if "tools" in m.get("supported_parameters", []) and ":batch" not in m["id"]
+                if isinstance(m, dict)
+                and isinstance(m.get("id"), str)
+                and "/" in m["id"]
+                and "tools" in (m.get("supported_parameters") or [])
+                and ":batch" not in m["id"]
+                and "text" in ((m.get("architecture") or {}).get("output_modalities") or ["text"])
             ]
         }
-    except (httpx.HTTPError, KeyError):
+        if not catalog["models"]:
+            raise ValueError("Empty model catalog")
+        return catalog
+    except (httpx.HTTPError, KeyError, TypeError, ValueError):
         return {"models": config.DEFAULT_MODELS, "warning": "Could not refresh catalog; showing configured defaults."}
 
 

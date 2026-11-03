@@ -94,3 +94,59 @@ def test_history_contains_only_user_and_own_model_and_restart_is_visible(client)
     storage.init()
     assert storage.get_run(interrupted)["status"] == "interrupted"
     assert storage.events(interrupted)[-1]["payload"]["type"] == "interrupted"
+
+
+def test_one_model_is_allowed_and_bounds_remain_enforced(client):
+    response = client.post("/api/runs", json=body(models=["test/one"]))
+    assert response.status_code == 201
+    saved = wait_done(client, response.json()["run_id"])
+    assert len(saved["result"]["reports"]) == 1
+    assert not saved["result"]["comparison"]["agreements"]
+    assert client.post("/api/runs", json=body(models=[])).status_code == 422
+    assert client.post("/api/runs", json=body(models=[f"test/{i}" for i in range(5)])).status_code == 422
+
+
+def test_catalog_includes_chinese_tool_models_with_metadata(client, monkeypatch):
+    import httpx
+
+    from parallax import app as app_module
+
+    real_client = httpx.AsyncClient
+    entries = [
+        {
+            "id": "qwen/example",
+            "name": "Qwen: Example",
+            "supported_parameters": ["tools"],
+            "context_length": 128000,
+            "pricing": {"prompt": "0.000001", "completion": "0.000002"},
+        },
+        {"id": "deepseek/example", "name": "DeepSeek", "supported_parameters": ["tools"]},
+        {"id": "other/no-tools", "name": "Other", "supported_parameters": []},
+        {"id": "other/image", "supported_parameters": ["tools"], "architecture": {"output_modalities": ["image"]}},
+        {"id": "bad"},
+    ]
+
+    def transport(request):
+        assert str(request.url) == "https://openrouter.ai/api/v1/models"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, json={"data": entries})
+
+    monkeypatch.setattr(app_module.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(transport), **kw))
+    models = client.get("/api/models").json()["models"]
+    assert [m["id"] for m in models] == ["qwen/example", "deepseek/example"]
+    assert models[0]["context_length"] == 128000
+    assert models[0]["pricing"]["prompt"] == "0.000001"
+
+
+def test_catalog_failure_preserves_configured_choices(client, monkeypatch):
+    import httpx
+
+    from parallax import app as app_module
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        app_module.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(lambda request: httpx.Response(503)), **kw)
+    )
+    result = client.get("/api/models").json()
+    assert result["models"] == config.DEFAULT_MODELS
+    assert result["warning"]
