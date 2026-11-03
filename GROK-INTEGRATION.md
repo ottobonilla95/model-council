@@ -32,7 +32,7 @@ Important: Grok Bot is separate from Grok chat, and its FAQ says it can choose f
 
 Sources: [Webhook routines](https://docs.x.ai/grok-bot/skills-routines-and-automations), [Bot MCP connections](https://docs.x.ai/grok-bot/computer-and-apps), [Bot FAQ](https://docs.x.ai/grok-bot/faq).
 
-## Recommendation for Model Council
+## Recommendation for Parallax
 
 - For coding and project questions, try a Grok Build adapter alongside Codex and Claude Code.
 - If preserving the usual Grok chat experience is essential, use the shared MCP question/result bridge with a user-started Grok turn. Keep manual answer import as a fallback.
@@ -40,7 +40,7 @@ Sources: [Webhook routines](https://docs.x.ai/grok-bot/skills-routines-and-autom
 
 ## Proposed bridge, not implemented
 
-ChatGPT would start a council job with the shared brief and selected participants. A backend would invoke configured local agents and store full answers with their source identity and session. ChatGPT would retrieve status/results and compare them. A local runner must be reachable by the backend; a cloud ChatGPT tool cannot simply execute a laptop CLI on its own.
+ChatGPT would start a Parallax research job with the shared brief and selected participants. A backend would invoke configured local agents and store full answers with their source identity and session. ChatGPT would retrieve status/results and compare them. A local runner must be reachable by the backend; a cloud ChatGPT tool cannot simply execute a laptop CLI on its own.
 
 For Grok chat participation, add authenticated tools such as `get_pending_question` and `submit_answer` to the same service. For Bot participation, a webhook could wake the Bot and its MCP connection could return the result. Keep job credentials scoped, originals intact, and missing/failed responses visible.
 

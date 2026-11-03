@@ -14,7 +14,7 @@ OpenRouter supplies model access; the harness supplies the research process. Sea
 
 ### Deep Agents: proposed custom foundation
 
-An MIT-licensed, model-agnostic agent harness with isolated subagents, context management, persistence, and configurable tools. LangChain provides an OpenRouter chat-model integration and a research tutorial that combines independent research contexts, search, page fetching, and cited synthesis. We would still implement the council orchestration and user experience.
+An MIT-licensed, model-agnostic agent harness with isolated subagents, context management, persistence, and configurable tools. LangChain provides an OpenRouter chat-model integration and a research tutorial that combines independent research contexts, search, page fetching, and cited synthesis. We would still implement the research orchestration and user experience.
 
 Sources: [repository](https://github.com/langchain-ai/deepagents), [research guide](https://docs.langchain.com/oss/python/deepagents/deep-research), [OpenRouter integration](https://docs.langchain.com/oss/python/integrations/chat/openrouter).
 

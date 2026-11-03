@@ -4,9 +4,9 @@ Investigated 2 November 2026. Scope: a conversational assistant for curiosity, a
 
 ## Recommendation
 
-**For a custom Model Council app, use the Deep Agents SDK inside a fixed LangGraph workflow.** OpenRouter supplies models; a shared search/read integration supplies research tools. Each selected researcher has its own state and evidence workspace. The workflow launches all of them, saves their answers, and then runs comparison and targeted verification.
+**For a custom Parallax app, use the Deep Agents SDK inside a fixed LangGraph workflow.** OpenRouter supplies models; a shared search/read integration supplies research tools. Each selected researcher has its own state and evidence workspace. The workflow launches all of them, saves their answers, and then runs comparison and targeted verification.
 
-This is my assessment of architectural fit, not proof that Deep Agents gives more accurate answers. Hermes remains a strong existing-assistant option. My earlier “try Hermes first” advice did not clearly distinguish adopting a personal assistant from building this controlled council. Pydantic AI Harness Researcher is a serious lighter alternative, and OpenRouter Fusion is the closest hosted baseline.
+This is my assessment of architectural fit, not proof that Deep Agents gives more accurate answers. Hermes remains a strong existing-assistant option. My earlier “try Hermes first” advice did not clearly distinguish adopting a personal assistant from building this controlled research panel. Pydantic AI Harness Researcher is a serious lighter alternative, and OpenRouter Fusion is the closest hosted baseline.
 
 ## Requirements that decide the choice
 
@@ -21,11 +21,11 @@ This is my assessment of architectural fit, not proof that Deep Agents gives mor
 
 | Candidate | What exists | What remains for this project | Assessment |
 | --- | --- | --- | --- |
-| Deep Agents + LangGraph | Agent loop, context management, model/tool configuration, subagents, workflow and persistence integration | Search/read tools, enforced isolation, fixed council stages and UI | Recommended custom foundation |
+| Deep Agents + LangGraph | Agent loop, context management, model/tool configuration, subagents, workflow and persistence integration | Search/read tools, enforced isolation, fixed research stages and UI | Recommended custom foundation |
 | Hermes Agent | Existing assistant surfaces, web tools, memory and delegation | Guaranteed model participation, routing or separate runs, durable evidence comparison | Prefer when adopting its assistant interface |
-| Pydantic AI Harness Researcher | Composed research stack, typed results, configurable agents and delegation | Council workflow, persistence and product interface | Strong lighter alternative |
+| Pydantic AI Harness Researcher | Composed research stack, typed results, configurable agents and delegation | Research workflow, persistence and product interface | Strong lighter alternative |
 | GPT Researcher | Research planning, retrieval, source collection and report generation | Independent per-model runs and conversational comparison | Prefer for reports |
-| Mastra | Agents, workflows, memory, streaming and council patterns | Research configuration and comparison application | Credible TypeScript option |
+| Mastra | Agents, workflows, memory, streaming and research panel patterns | Research configuration and comparison application | Credible TypeScript option |
 | smolagents | Small framework with multi-agent web examples | More application lifecycle and comparison work | Viable; no decisive advantage found here |
 | OpenRouter Fusion | Hosted parallel panel, research tools and structured comparison | UI, evaluation and controls beyond its API | Closest hosted baseline; not an OSS harness |
 
@@ -49,7 +49,7 @@ Search and reliable source extraction remain integrations we must supply. The ex
 
 Sources: [MoA documentation](https://hermes-agent.nousresearch.com/docs/user-guide/features/mixture-of-agents), [reviewed implementation](https://github.com/NousResearch/hermes-agent/blob/18399981f2bfa6256f63322a6470c766ffe6c572/agent/moa_loop.py).
 
-**Delegation does create children with tools.** Default batches use one configured delegation model. The official advanced-delegation plugin adds per-task model/profile routing. Separate Hermes sessions can also be driven through documented integration interfaces. Thus Hermes can support the proposed council, with explicit orchestration.
+**Delegation does create children with tools.** Default batches use one configured delegation model. The official advanced-delegation plugin adds per-task model/profile routing. Separate Hermes sessions can also be driven through documented integration interfaces. Thus Hermes can support the proposed research panel, with explicit orchestration.
 
 Hermes documents full delegation logs, but automatic seven-day pruning means the application should retain evidence it promises to keep. Workspace privacy and fixed participation still need enforcement.
 
@@ -67,11 +67,11 @@ Sources: [Researcher](https://pydantic.dev/docs/ai/harness/researcher/), [subage
 
 ## Other candidates
 
-GPT Researcher is closer to a report pipeline. A council would run separately configured researchers; specialist roles alone are not independent model opinions. Reviewed code creates per-instance configuration and source collections and copies mutable defaults. Prefer per-run configuration over changing process environment variables during concurrent jobs. Pin all relevant LLM roles before attributing a report to one model.
+GPT Researcher is closer to a report pipeline. A research panel would run separately configured researchers; specialist roles alone are not independent model opinions. Reviewed code creates per-instance configuration and source collections and copies mutable defaults. Prefer per-run configuration over changing process environment variables during concurrent jobs. Pin all relevant LLM roles before attributing a report to one model.
 
 Sources: [configuration](https://docs.gptr.dev/docs/gpt-researcher/gptr/config), [provider support](https://docs.gptr.dev/docs/gpt-researcher/llms/supported-llms), [agent code](https://github.com/assafelovic/gpt-researcher/blob/3582a6841fe7dc801e2a34e34ee408641aea9bce/gpt_researcher/agent.py), [configuration code](https://github.com/assafelovic/gpt-researcher/blob/3582a6841fe7dc801e2a34e34ee408641aea9bce/gpt_researcher/config/config.py).
 
-Mastra's documented council/workflow patterns make it a credible TypeScript option. smolagents provides multi-agent web examples. Neither showed a decisive advantage for these requirements in this review; neither was quality-benchmarked.
+Mastra's documented research workflow patterns make it a credible TypeScript option. smolagents provides multi-agent web examples. Neither showed a decisive advantage for these requirements in this review; neither was quality-benchmarked.
 
 Sources: [Mastra multi-agent guide](https://mastra.ai/docs/guides/multi-agent-systems), [Mastra agents](https://github.com/mastra-ai/mastra/blob/main/docs/src/content/en/docs/agents/overview.mdx), [smolagents example](https://huggingface.co/docs/smolagents/v1.22.0/en/examples/multiagents).
 

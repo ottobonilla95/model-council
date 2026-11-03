@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
-DATA = Path(os.environ.get("COUNCIL_DATA_DIR", ROOT / "data"))
+DATA = Path(os.environ.get("PARALLAX_DATA_DIR", ROOT / "data"))
 DEFAULT_MODELS = [
     {"id": "openai/gpt-6.1-terra", "name": "GPT", "color": "green"},
     {"id": "anthropic/claude-sonnet-5.5", "name": "Claude", "color": "orange"},

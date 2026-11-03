@@ -1145,7 +1145,7 @@ wheels = [
 ]
 
 [[package]]
-name = "model-council"
+name = "parallax"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

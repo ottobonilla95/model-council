@@ -27,7 +27,7 @@ async def lifespan(app):
     await asyncio.gather(*active, return_exceptions=True)
 
 
-app = FastAPI(title="Model Council", lifespan=lifespan)
+app = FastAPI(title="Parallax", lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
 
 
@@ -167,7 +167,7 @@ async def stream(run_id: str, request: Request, after: int = 0):
 @app.get("/api/runs/{run_id}/export")
 def export(run_id: str):
     saved = run(run_id)
-    return JSONResponse(saved, headers={"Content-Disposition": f'attachment; filename="council-{run_id[:8]}.json"'})
+    return JSONResponse(saved, headers={"Content-Disposition": f'attachment; filename="parallax-{run_id[:8]}.json"'})
 
 
 DIST = config.ROOT / "frontend" / "dist"

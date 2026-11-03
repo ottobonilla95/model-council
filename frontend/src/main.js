@@ -18,7 +18,7 @@ let activeTab = 'answer';
 let mobileNav = false;
 let sending = false;
 let prefs;
-try { prefs = JSON.parse(localStorage.getItem('council-preferences') || '{}'); } catch { prefs = {}; }
+try { prefs = JSON.parse(localStorage.getItem('parallax-preferences') || '{}'); } catch { prefs = {}; }
 let selected = prefs.models || [];
 let modelSlots = prefs.slots || [];
 let judge = prefs.judge || '';
@@ -43,7 +43,7 @@ async function api(path, options = {}) {
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
 function savePrefs() {
-  localStorage.setItem('council-preferences', JSON.stringify({ models: selected, slots: modelSlots, judge, depth, context }));
+  localStorage.setItem('parallax-preferences', JSON.stringify({ models: selected, slots: modelSlots, judge, depth, context }));
 }
 function identity(id) {
   const provider = id.split('/')[0];
@@ -68,7 +68,7 @@ function themeButton() {
 function toggleTheme() {
   const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem('council-theme', theme); } catch { /* Keep the current session usable. */ }
+  try { localStorage.setItem('parallax-theme', theme); } catch { /* Keep the current session usable. */ }
   document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#141619' : '#f7f8fa';
   const button = document.querySelector('.theme-toggle');
   const label = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`;
@@ -104,7 +104,7 @@ function shell() {
       </div>
     </aside>
     <main class="main ${current ? 'has-results' : 'empty'}">
-      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="app-name">Model Council</span><button class="icon-button" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right"><button class="demo-switch ${demo ? 'on' : ''}" data-action="demo" aria-pressed="${demo}">${demo ? ico('flask-conical') : '<span class="live-dot"></span>'}<span>${demo ? 'Demo mode' : 'Live research'}</span>${ico('chevron-down')}</button>${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Model Council works">${ico('circle-help')}</button></div></header>
+      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="app-name">Parallax</span><button class="icon-button" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right"><button class="demo-switch ${demo ? 'on' : ''}" data-action="demo" aria-pressed="${demo}">${demo ? ico('flask-conical') : '<span class="live-dot"></span>'}<span>${demo ? 'Demo mode' : 'Live research'}</span>${ico('chevron-down')}</button>${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
       <div class="chat-surface"><div id="desk"></div>
       <div class="composer-area"><div id="composer"></div><p class="composer-footnote">${demo ? 'Demo uses sample answers. No model calls or web searches.' : 'Your question goes to OpenRouter; searches go to Tavily. AI can make mistakes.'}</p></div></div>
     </main>
@@ -155,7 +155,7 @@ function tabContent() {
   const comparison = current.comparison;
   if (activeTab === 'answer') {
     if (!comparison) return `<div class="working-state"><div class="working-symbol">${ico(running() ? 'loader-circle' : 'alert-circle', running() ? 'spin' : '')}</div><h2>${running() ? (current.comparing ? 'Connecting the findings' : 'A few minds on your question') : 'This round has stopped'}</h2><p>${running() ? (current.comparing ? 'Checking the evidence, preserving the differences, and shaping a useful answer.' : 'Each researcher works independently. Their answers come together here when they finish.') : esc(current.message || 'You can inspect saved research in Originals and Sources, or start another round.')}</p><div class="working-models">${current.request.models.map(m => modelChip(m)).join('')}</div>${current.comparing ? '<span class="working-caption">Independent answers are ready in Originals.</span>' : ''}</div>`;
-    return `<div class="answer-heading"><span class="answer-emblem">${ico('layers-3')}</span><div><strong>${current.request.demo ? 'Sample combined answer' : 'The council’s perspective'}</strong><small>${current.request.models.length} researchers, compared by ${esc(identity(current.request.judge).name)}</small></div></div><article class="markdown">${md(comparison.answer)}</article>${comparison.limitations.length ? `<div class="limitations">${ico('circle-help')}<div><strong>Keep in mind</strong>${comparison.limitations.map(x => `<p>${esc(x)}</p>`).join('')}</div></div>` : ''}${comparison.next_steps.length ? `<div class="next-steps"><h3>A useful next step</h3>${comparison.next_steps.map(s => `<p>${ico('arrow-up-right')}<span>${esc(s)}</span></p>`).join('')}</div>` : ''}`;
+    return `<div class="answer-heading"><span class="answer-emblem">${ico('layers-3')}</span><div><strong>${current.request.demo ? 'Sample combined answer' : 'Parallax’s perspective'}</strong><small>${current.request.models.length} researchers, compared by ${esc(identity(current.request.judge).name)}</small></div></div><article class="markdown">${md(comparison.answer)}</article>${comparison.limitations.length ? `<div class="limitations">${ico('circle-help')}<div><strong>Keep in mind</strong>${comparison.limitations.map(x => `<p>${esc(x)}</p>`).join('')}</div></div>` : ''}${comparison.next_steps.length ? `<div class="next-steps"><h3>A useful next step</h3>${comparison.next_steps.map(s => `<p>${ico('arrow-up-right')}<span>${esc(s)}</span></p>`).join('')}</div>` : ''}`;
   }
   if (activeTab === 'disagreements') {
     if (!comparison) return empty('The comparison comes after the independent research.', 'Originals and sources appear as each researcher finishes.');

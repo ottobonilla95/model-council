@@ -8,9 +8,9 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import PrivateAttr
 
-from council.engine import CouncilEngine, clean_citations, safe_error
-from council.schemas import RunRequest
-from council.web import ResearchWeb, validate_url
+from parallax.engine import ParallaxEngine, clean_citations, safe_error
+from parallax.schemas import RunRequest
+from parallax.web import ResearchWeb, validate_url
 
 
 class ScriptedModel(BaseChatModel):
@@ -99,7 +99,7 @@ async def test_real_deepagents_tool_loop_parallel_workflow_and_isolation():
     request = RunRequest(
         question="Compare the evidence", context="A shared constraint", models=["test/one", "test/two"], judge="test/judge"
     )
-    engine = CouncilEngine(
+    engine = ParallaxEngine(
         request,
         "test",
         emit,
@@ -138,7 +138,7 @@ async def test_one_failed_model_does_not_prevent_comparison():
         return ScriptedModel(model_id=model_id)
 
     request = RunRequest(question="A question", models=["test/working", "test/broken"], judge="test/judge")
-    result = await CouncilEngine(
+    result = await ParallaxEngine(
         request, "test", emit, {"openrouter": "fake", "tavily": "fake"}, factory=factory, web_factory=FakeWeb
     ).run()
     assert result["reports"][1]["status"] == "failed"
@@ -196,7 +196,7 @@ async def test_model_call_limit_stops_an_agent_that_keeps_searching():
         return model
 
     request = RunRequest(question="A bounded question", models=["test/loop", "test/working"], judge="test/judge")
-    result = await CouncilEngine(
+    result = await ParallaxEngine(
         request, "test", emit, {"openrouter": "fake", "tavily": "fake"}, factory=factory, web_factory=FakeWeb
     ).run()
     assert models["test/loop"]._calls == 8
@@ -216,8 +216,8 @@ async def test_long_sources_are_read_in_continuable_chunks(monkeypatch):
 
     transport = httpx.MockTransport(lambda request: httpx.Response(200, text=text, headers={"content-type": "text/plain"}))
     original_client = httpx.AsyncClient
-    monkeypatch.setattr("council.web.validate_url", public)
-    monkeypatch.setattr("council.web.httpx.AsyncClient", lambda **kwargs: original_client(transport=transport, **kwargs))
+    monkeypatch.setattr("parallax.web.validate_url", public)
+    monkeypatch.setattr("parallax.web.httpx.AsyncClient", lambda **kwargs: original_client(transport=transport, **kwargs))
     web = ResearchWeb("fake", "r1", emit)
     first = json.loads(await web.read("https://example.org/long"))
     second = json.loads(await web.read("https://example.org/long", first["next_offset"]))
@@ -258,7 +258,7 @@ async def test_same_scratch_filename_is_private_to_each_researcher():
         pass
 
     request = RunRequest(question="Keep private notes", models=["test/one", "test/two"], judge="test/judge")
-    engine = CouncilEngine(
+    engine = ParallaxEngine(
         request,
         "test",
         emit,

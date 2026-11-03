@@ -12,7 +12,7 @@ def now():
 
 def connection():
     config.DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
-    conn = sqlite3.connect(config.DATA / "council.sqlite3", timeout=15)
+    conn = sqlite3.connect(config.DATA / "parallax.sqlite3", timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     return conn

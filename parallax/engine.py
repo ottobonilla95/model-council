@@ -48,7 +48,7 @@ Return the required Comparison structure. Keep answer under 1000 words, each lis
 """
 
 
-class CouncilState(TypedDict):
+class ParallaxState(TypedDict):
     reports: Annotated[list[dict], operator.add]
     comparison: dict
 
@@ -115,7 +115,7 @@ def model_factory(model_id, api_key):
         max_retries=1,
         request_timeout=65,
         openrouter_provider={"require_parameters": True, "allow_fallbacks": False},
-        app_title="Model Council",
+        app_title="Parallax",
     )
 
 
@@ -151,7 +151,7 @@ def clean_citations(comparison, sources):
     return comparison
 
 
-class CouncilEngine:
+class ParallaxEngine:
     def __init__(self, request: RunRequest, run_id, emit, credentials, histories=None, factory=model_factory, web_factory=ResearchWeb):
         self.request = request
         self.run_id = run_id
@@ -265,7 +265,7 @@ class CouncilEngine:
         return {"comparison": result}
 
     async def run(self):
-        graph = StateGraph(CouncilState)
+        graph = StateGraph(ParallaxState)
         nodes = []
         for index in range(len(self.request.models)):
             name = f"research_{index}"
@@ -303,7 +303,7 @@ async def execute_run(request, run_id, credentials, histories):
     async def emit(payload):
         storage.event(run_id, payload)
 
-    engine = CouncilEngine(request, run_id, emit, credentials, histories)
+    engine = ParallaxEngine(request, run_id, emit, credentials, histories)
     try:
         result = await engine.run()
         storage.finish(run_id, "completed", result)

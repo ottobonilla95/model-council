@@ -5,7 +5,7 @@ def demo_report(index, model):
     samples = [
         (
             "Start with independent research",
-            "A useful council needs each model to search and read for itself. Comparing three first impressions can repeat the same missing evidence.\n\nGive every researcher the same question and constraints, then preserve their original answers before combining them.\n\n**Assumption:** your goal is understanding disagreements, rather than simply producing longer answers.",
+            "A useful research panel needs each model to search and read for itself. Comparing three first impressions can repeat the same missing evidence.\n\nGive every researcher the same question and constraints, then preserve their original answers before combining them.\n\n**Assumption:** your goal is understanding disagreements, rather than simply producing longer answers.",
             "LangGraph workflow patterns",
             "https://docs.langchain.com/oss/python/langgraph/workflows-agents",
         ),
@@ -53,7 +53,7 @@ def demo_report(index, model):
 
 def demo_comparison():
     return {
-        "answer": "## More perspectives. Better questions.\n\nThis is a **sample comparison**, showing how Model Council presents independent findings. No models were called and no sources were searched.\n\nFor the example question about using several AI models, the sample recommendation is to start with **two independent researchers and an evidence-based comparison**. Each should search, read sources and form an answer before seeing the other response.\n\nThe useful result is not just a smoother answer. It is knowing **where the answers agree, why they differ, and which evidence could settle the difference**.\n\nOpen **Originals** to see the individual perspectives, or **Sources** to inspect the example references. Connect your keys in Settings and turn off Demo to research your own question.",
+        "answer": "## More perspectives. Better questions.\n\nThis is a **sample comparison**, showing how Parallax presents independent findings. No models were called and no sources were searched.\n\nFor the example question about using several AI models, the sample recommendation is to start with **two independent researchers and an evidence-based comparison**. Each should search, read sources and form an answer before seeing the other response.\n\nThe useful result is not just a smoother answer. It is knowing **where the answers agree, why they differ, and which evidence could settle the difference**.\n\nOpen **Originals** to see the individual perspectives, or **Sources** to inspect the example references. Connect your keys in Settings and turn off Demo to research your own question.",
         "agreements": [
             {
                 "claim": "Keep the first research round independent",

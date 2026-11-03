@@ -1,4 +1,6 @@
-# Model Council
+# Parallax
+
+[Source repository](https://github.com/ottobonilla95/parallax)
 
 A local research chat that asks 2–4 models to investigate independently, then compares their answers with sources and meaningful disagreements intact.
 
@@ -9,11 +11,11 @@ Built with **Deep Agents, LangGraph, OpenRouter, FastAPI and a Vite interface**.
 Requires [uv](https://docs.astral.sh/uv/) and Node.js 20.19+ or 22.12+. Python is managed by uv.
 
 ```sh
-cd /Users/otto/Local/personal/model-council
+cd /Users/otto/Local/personal/parallax
 ./run.sh
 ```
 
-Open [Model Council](http://127.0.0.1:8310). The launcher installs the locked Python dependencies and builds the frontend if no build exists. It binds only to this computer. To use another port, set `COUNCIL_PORT=8311`.
+Open [Parallax](http://127.0.0.1:8310). The launcher installs the locked Python dependencies and builds the frontend if no build exists. It binds only to this computer. To use another port, set `PARALLAX_PORT=8311`.
 
 **Demo works without keys.** It runs the actual outer workflow with clearly labeled sample data, not generated answers. Arbitrary questions in Demo still receive the same illustrative findings.
 
@@ -71,24 +73,24 @@ Completed answers survive a server restart; in-flight rounds become **interrupte
 ```sh
 uv sync --locked
 uv run pytest -q
-uv run ruff check council tests
+uv run ruff check parallax tests
 cd frontend
 npm ci
 npm run build
 ```
 
-For frontend development, run `uv run uvicorn council.app:app --host 127.0.0.1 --port 8310` in one terminal and `npm run dev` in `frontend` in another. Vite proxies `/api` to the backend. Rebuild the frontend to update the normal local app.
+For frontend development, run `uv run uvicorn parallax.app:app --host 127.0.0.1 --port 8310` in one terminal and `npm run dev` in `frontend` in another. Vite proxies `/api` to the backend. Rebuild the frontend to update the normal local app.
 
 Tests exercise the real Deep Agents loop with scripted models, parallel workflow ordering, researcher isolation, structured comparison, partial failures, work limits, source chunking, local-address rejection, history privacy, cancellation, persistence, export, event replay and credential handling. They make no paid calls.
 
 ## Project files
 
-- `council/engine.py`: Deep Agents researchers and the fixed LangGraph council.
-- `council/web.py`: bounded search, public source reading and source ledgers.
-- `council/storage.py`: local SQLite conversations, rounds and events.
-- `council/app.py`: local API, event streaming and frontend serving.
+- `parallax/engine.py`: Deep Agents researchers and the fixed LangGraph workflow.
+- `parallax/web.py`: bounded search, public source reading and source ledgers.
+- `parallax/storage.py`: local SQLite conversations, rounds and events.
+- `parallax/app.py`: local API, event streaming and frontend serving.
 - `frontend/src/`: interface and styles.
 - `tests/`: behavioral checks using the real harness with deterministic model doubles.
-- `data/`: private runtime data, excluded from Git. Set `COUNCIL_DATA_DIR` to change its location.
+- `data/`: private runtime data, excluded from Git. Set `PARALLAX_DATA_DIR` to change its location.
 
 The original [project brief](PROJECT-BRIEF.md), [harness investigation](HARNESS-DECISION.md) and [Grok integration research](GROK-INTEGRATION.md) are retained. Architecture research was completed on 2 November 2026; the working application was built on 3 November 2026.

@@ -4,9 +4,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from council import config, storage
-from council.app import app
-from council.schemas import RunRequest
+from parallax import config, storage
+from parallax.app import app
+from parallax.schemas import RunRequest
 
 
 @pytest.fixture

@@ -79,7 +79,7 @@ class ResearchWeb:
             async with httpx.AsyncClient(timeout=25, follow_redirects=False, trust_env=False) as client:
                 for _ in range(5):
                     await validate_url(url)
-                    async with client.stream("GET", url, headers={"User-Agent": "ModelCouncil/0.1 research source reader"}) as response:
+                    async with client.stream("GET", url, headers={"User-Agent": "Parallax/0.1 research source reader"}) as response:
                         if response.is_redirect:
                             url = str(response.url.join(response.headers["location"]))
                             continue

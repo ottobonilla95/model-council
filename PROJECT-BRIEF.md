@@ -1,4 +1,4 @@
-# Model Council
+# Parallax
 
 Historical planning brief. The implemented application and current limitations are documented in [README.md](README.md).
 
@@ -55,7 +55,7 @@ If a model fails, synthesize the available responses and visibly disclose the mi
 
 Use 10–20 real questions that previously produced conflicting advice. Include checkable factual questions, practical decisions, and preference-dependent questions. Save the shared brief and original answers.
 
-Compare the council's output with a single-model baseline using the same information. Assess factual correctness where checkable, visibility of assumptions, actionable next steps, preservation of meaningful dissent, time, and cost. For subjective decisions, record the user's criteria rather than claiming there is one objectively correct answer.
+Compare Parallax's output with a single-model baseline using the same information. Assess factual correctness where checkable, visibility of assumptions, actionable next steps, preservation of meaningful dissent, time, and cost. For subjective decisions, record the user's criteria rather than claiming there is one objectively correct answer.
 
 The decision to build should depend on whether this workflow helps resolve actual disagreements, not whether the merged prose sounds more confident.
 
