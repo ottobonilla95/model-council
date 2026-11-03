@@ -43,7 +43,7 @@ Alternatively, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. `TAVI
 - Configurable models through the current public OpenRouter catalog or manually entered IDs. No model substitution is intentionally requested.
 - Responsive layout and keyboard navigation. Enter sends; Shift+Enter adds a line; Cmd/Ctrl+K opens a new conversation.
 
-The main screen is a message thread and composer, with the chat model and Auto mode visible. Research produces one conversational answer. **Research details** under that reply holds sources, original answers, disagreements and export. The conversation drawer preserves the full thread, rather than replacing prior messages with report tabs.
+The main screen is a message thread and composer, with the chat model and Auto mode visible. During research, badges show each selected model by name and spin while that model is working. If a comparison runs, its model gets a **Comparing** badge. Research produces one conversational answer. **Research details** under that reply holds sources, original answers, disagreements and export. The conversation drawer preserves the full thread, rather than replacing prior messages with report tabs.
 
 Dark mode is the default. Use the sun/moon button in the header to switch themes; your preference is saved in this browser and applied before the app paints.
 

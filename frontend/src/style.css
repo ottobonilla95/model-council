@@ -517,3 +517,10 @@ button.memory-receipt:hover { color: var(--accent); }
   .catalog-footer > div { gap: 18px; justify-content: flex-end; }
   .catalog-footer .primary-button { white-space: nowrap; }
 }
+
+.live-progress { margin: 0 0 12px; }
+.live-progress .response-status { min-height: 0; margin: 0 0 10px; }
+.live-models { display: flex; flex-wrap: wrap; gap: 6px; }
+.live-model { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.live-model strong { color: var(--ink); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.live-model svg { width: 13px; height: 13px; flex-shrink: 0; color: var(--accent); }

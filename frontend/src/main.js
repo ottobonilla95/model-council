@@ -154,8 +154,30 @@ function researchDetails(run) {
   const comparison = run.comparison;
   return `<details class="research-evidence" data-evidence="${run.id}"><summary>${ico('search')} Research details (${reports.length} ${reports.length === 1 ? 'model' : 'models'}, ${sources.length} sources) ${ico('chevron-down')}</summary><div class="evidence-body">${sources.length ? `<h3>Sources</h3><ol class="chat-sources">${sources.map(s => `<li><a href="${esc(safeURL(s.url))}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a><small>${esc(hostname(s.url))} · ${s.read ? 'Page read' : run.request.demo ? 'Example reference' : 'Search excerpt'}</small></li>`).join('')}</ol>` : ''}${reports.length ? `<h3>${reports.length === 1 ? 'Research answer' : 'Independent answers'}</h3>${reports.map(r => `<details class="original-answer"><summary>${modelChip(r.model)} <span>${r.status === 'completed' ? 'View answer' : esc(r.status)}</span>${ico('chevron-down')}</summary><article class="markdown">${md(r.answer)}</article>${r.error ? `<p class="answer-note">${esc(r.error)}</p>` : ''}</details>`).join('')}` : ''}${comparison ? ['agreements','disagreements'].map(key => comparison[key]?.length ? `<h3>${key === 'agreements' ? 'Where the models agree' : 'Where they differ'}</h3>${comparison[key].map(p => `<p><strong>${esc(p.claim)}</strong><br>${esc(p.detail)}</p>`).join('')}` : '').join('') : ''}${comparison?.limitations?.length ? `<h3>Limitations</h3>${comparison.limitations.map(p => `<p>${esc(p)}</p>`).join('')}` : ''}<a class="export-message" href="/api/runs/${run.id}/export" download>${ico('download')} Export details</a></div></details>`;
 }
+function liveProgress(run) {
+  const researching = run.mode === 'research';
+  const badge = (model, label, icon, spinning = false) => {
+    const name = identity(model).name;
+    return `<span class="live-model" title="${esc(model)}">${ico(icon, spinning ? 'spin' : '')}<strong>${esc(name)}</strong><span>${label}</span></span>`;
+  };
+  const researchers = researching ? run.request.models.map(model => {
+    const report = Object.values(run.reports).find(report => report.model === model);
+    if (report?.status === 'completed') return badge(model, 'Done', 'check');
+    if (report?.status === 'partial') return badge(model, 'Partial', 'alert-circle');
+    if (report) return badge(model, 'Failed', 'alert-circle');
+    return run.startedModels.has(model) ? badge(model, 'Researching', 'loader-circle', true) : badge(model, 'Queued', 'clock-3');
+  }).join('') : '';
+  const comparison = researching && run.comparing;
+  const badges = researching
+    ? researchers + (comparison ? badge(run.comparing, 'Comparing', 'loader-circle', true) : '')
+    : run.routing && run.request.chat_model ? badge(run.request.chat_model, 'Thinking', 'loader-circle', true) : '';
+  const status = comparison ? 'Combining findings' : researching ? 'Research in progress' : 'Thinking…';
+  return `<div class="live-progress"><p class="response-status">${status}</p>${badges ? `<div class="live-models">${badges}</div>` : ''}</div>`;
+}
 function renderDesk() {
   const desk = document.querySelector('#desk');
+  const announcement = document.querySelector('#run-announcement');
+  if (!desk || !current) announcement.textContent = '';
   if (!desk) return;
   const nearBottom = desk.scrollHeight - desk.scrollTop - desk.clientHeight < 100;
   const open = new Set([...desk.querySelectorAll('[data-evidence][open]')].map(e => e.dataset.evidence));
@@ -168,16 +190,18 @@ function renderDesk() {
   desk.innerHTML = `<section class="chat-thread" aria-label="Conversation">${turns.map(run => {
     const isRunning = run.status === 'running';
     const answer = run.answer || run.comparison?.answer;
-    const status = run.mode === 'research' ? run.comparing ? 'Comparing findings…' : 'Researching with your team…' : 'Thinking…';
-    return `<article class="chat-turn"><div class="user-message"><span class="sr-only">You</span><div>${esc(run.request.question)}</div></div><div class="assistant-message"><div class="assistant-label">${brandMark}<span>Parallax</span>${run.request.demo ? '<span class="sample-label">Saved demo</span>' : ''}</div>${answer ? `<div class="markdown">${md(answer)}</div>` : isRunning ? `<p class="response-status" role="status">${ico('loader-circle','spin')}${status}</p>` : `<p class="answer-note">${esc(run.message || 'This response stopped. Send another message to continue.')}</p>`}${run.mode === 'research' && (Object.keys(run.reports).length || sourceList(run).length) ? researchDetails(run) : ''}${run.memorySaved ? `<button class="memory-receipt" data-action="settings">${ico('check')} ${run.memorySaved === 1 ? 'Memory updated' : `${run.memorySaved} memories updated`}</button>` : run.memoryUnavailable ? '<span class="memory-receipt">Memory could not update this time.</span>' : ''}${run.id === current.id && answer && !isRunning ? `<div class="message-actions"><button data-action="copy" aria-label="Copy response">${ico('copy')}</button></div>` : ''}</div></article>`;
+    return `<article class="chat-turn"><div class="user-message"><span class="sr-only">You</span><div>${esc(run.request.question)}</div></div><div class="assistant-message"><div class="assistant-label">${brandMark}<span>Parallax</span>${run.request.demo ? '<span class="sample-label">Saved demo</span>' : ''}</div>${answer ? `<div class="markdown">${md(answer)}</div>` : isRunning ? liveProgress(run) : `<p class="answer-note">${esc(run.message || 'This response stopped. Send another message to continue.')}</p>`}${run.mode === 'research' && (Object.keys(run.reports).length || sourceList(run).length) ? researchDetails(run) : ''}${run.memorySaved ? `<button class="memory-receipt" data-action="settings">${ico('check')} ${run.memorySaved === 1 ? 'Memory updated' : `${run.memorySaved} memories updated`}</button>` : run.memoryUnavailable ? '<span class="memory-receipt">Memory could not update this time.</span>' : ''}${run.id === current.id && answer && !isRunning ? `<div class="message-actions"><button data-action="copy" aria-label="Copy response">${ico('copy')}</button></div>` : ''}</div></article>`;
   }).join('')}</section>`;
+  const progress = desk.querySelector('.live-progress');
+  const summary = progress ? [...progress.querySelectorAll('.response-status, .live-model')].map(node => node.innerText).join('. ') : '';
+  if (announcement.textContent !== summary) announcement.textContent = summary;
   desk.querySelectorAll('[data-evidence]').forEach(e => { if (open.has(e.dataset.evidence)) e.open = true; });
   decorate();
   if (nearBottom) desk.scrollTop = desk.scrollHeight;
 }
 function stateFromRun(run) {
   if (run.activity && run.sources && run.reports) return run;
-  const state = { id: run.id, status: run.status, request: run.request, reports: {}, sources: {}, usage: {}, activity: [], comparison: run.result?.comparison || null, answer: run.result?.answer || '', mode: run.result?.mode || (run.request.demo ? 'research' : null), comparing: false, message: '' };
+  const state = { id: run.id, status: run.status, request: run.request, reports: {}, sources: {}, usage: {}, activity: [], comparison: run.result?.comparison || null, answer: run.result?.answer || '', mode: run.result?.mode || (run.request.demo ? 'research' : null), comparing: null, startedModels: new Set(), routing: false, message: '' };
   (run.events || []).forEach(e => applyEvent(e.payload, false, state));
   state.status = run.status;
   for (const report of run.result?.reports || []) { state.reports[report.agent] = report; state.sources[report.agent] = report.sources; }
@@ -187,15 +211,16 @@ function hydrate(run) { current = stateFromRun(run); }
 function applyEvent(event, render = true, target = current) {
   if (!target) return;
   switch (event.type) {
+    case 'routing': target.routing = true; break;
     case 'route': target.mode = event.mode; break;
     case 'chat_done': target.mode = 'chat'; target.answer = event.answer; break;
-    case 'activity': target.activity.push(event); break;
+    case 'activity': target.activity.push(event); return;
     case 'sources': target.sources[event.agent] = event.sources; break;
-    case 'usage': target.usage[event.agent] = event; break;
-    case 'researcher_start': target.mode = 'research'; break;
+    case 'usage': target.usage[event.agent] = event; return;
+    case 'researcher_start': target.mode = 'research'; target.startedModels.add(event.model); break;
     case 'researcher_done': target.reports[event.agent] = event.report; target.sources[event.agent] = event.report.sources; target.usage[event.agent] = event.report.usage; break;
-    case 'comparison_start': target.comparing = true; break;
-    case 'comparison_done': target.comparison = event.comparison; target.sources.judge = event.sources; target.usage.judge = event.usage; break;
+    case 'comparison_start': target.comparing = event.model || target.request.judge; break;
+    case 'comparison_done': target.comparing = null; target.comparison = event.comparison; target.sources.judge = event.sources; target.usage.judge = event.usage; break;
     case 'memory_saved': target.memorySaved = event.count; break;
     case 'memory_unavailable': target.memoryUnavailable = true; break;
     case 'done': target.status = 'completed'; break;
