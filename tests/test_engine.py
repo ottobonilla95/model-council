@@ -97,7 +97,7 @@ async def test_real_deepagents_tool_loop_parallel_workflow_and_isolation():
         return model
 
     request = RunRequest(
-        question="Compare the evidence", context="A shared constraint", models=["test/one", "test/two"], judge="test/judge"
+        mode="research", question="Compare the evidence", context="A shared constraint", models=["test/one", "test/two"], judge="test/judge"
     )
     engine = ParallaxEngine(
         request,
@@ -115,7 +115,7 @@ async def test_real_deepagents_tool_loop_parallel_workflow_and_isolation():
     assert all(r["tool_calls"] == 2 for r in result["reports"])
     assert all(r["usage"]["model_calls"] == 3 for r in result["reports"])
     assert result["comparison"]["agreements"][0]["source_ids"] == ["r1-s1"]
-    types = [e["type"] for e in events]
+    types = [e["type"] for e in events if e["type"] != "route"]
     assert types[:2] == ["researcher_start", "researcher_start"]
     assert max(i for i, t in enumerate(types) if t == "researcher_done") < types.index("comparison_start")
     for model in models[:2]:
@@ -137,7 +137,7 @@ async def test_one_failed_model_does_not_prevent_comparison():
             raise RuntimeError("Provider unavailable")
         return ScriptedModel(model_id=model_id)
 
-    request = RunRequest(question="A question", models=["test/working", "test/broken"], judge="test/judge")
+    request = RunRequest(mode="research", question="A question", models=["test/working", "test/broken"], judge="test/judge")
     result = await ParallaxEngine(
         request, "test", emit, {"openrouter": "fake", "tavily": "fake"}, factory=factory, web_factory=FakeWeb
     ).run()
@@ -195,11 +195,11 @@ async def test_model_call_limit_stops_an_agent_that_keeps_searching():
         models[model_id] = model
         return model
 
-    request = RunRequest(question="A bounded question", models=["test/loop", "test/working"], judge="test/judge")
+    request = RunRequest(mode="research", question="A bounded question", models=["test/loop", "test/working"], judge="test/judge")
     result = await ParallaxEngine(
         request, "test", emit, {"openrouter": "fake", "tavily": "fake"}, factory=factory, web_factory=FakeWeb
     ).run()
-    assert models["test/loop"]._calls == 8
+    assert models["test/loop"]._calls == 6
     assert result["reports"][0]["status"] == "failed"
     assert "ModelCallLimitExceededError" in result["reports"][0]["error"]
 
@@ -257,7 +257,7 @@ async def test_same_scratch_filename_is_private_to_each_researcher():
     async def emit(event):
         pass
 
-    request = RunRequest(question="Keep private notes", models=["test/one", "test/two"], judge="test/judge")
+    request = RunRequest(mode="research", question="Keep private notes", models=["test/one", "test/two"], judge="test/judge")
     engine = ParallaxEngine(
         request,
         "test",
@@ -269,6 +269,6 @@ async def test_same_scratch_filename_is_private_to_each_researcher():
     results = await asyncio.gather(engine.research(0), engine.research(1))
     for index, result in enumerate(results):
         report = result["reports"][0]
-        assert report["status"] == "completed"
+        assert report["status"] == "partial"
         assert request.models[index] in report["answer"]
         assert request.models[1 - index] not in report["answer"]

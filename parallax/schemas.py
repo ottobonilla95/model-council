@@ -11,6 +11,8 @@ class RunRequest(BaseModel):
     models: list[str] = Field(min_length=2, max_length=4)
     judge: str = Field(min_length=3, max_length=180)
     depth: Literal["standard", "deep"] = "standard"
+    mode: Literal["auto", "chat", "research"] = "auto"
+    chat_model: str = Field(default="google/gemini-3.8-flash", min_length=3, max_length=180)
     demo: bool = False
     fresh: bool = False
     timezone: str = "Europe/Stockholm"

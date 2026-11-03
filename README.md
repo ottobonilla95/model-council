@@ -2,7 +2,7 @@
 
 [Source repository](https://github.com/ottobonilla95/parallax)
 
-A research chat that asks 2–4 models to investigate independently, then compares their answers with sources and meaningful disagreements intact.
+A conversational assistant that answers everyday messages directly and automatically brings in 2–4 independent researchers when a question needs current sources or multiple perspectives. One reply stays in the chat; sources, original answers and disagreements are expandable.
 
 Built with **Deep Agents, LangGraph, OpenRouter, FastAPI and a Vite interface**. This uses our own research harness around API models; it does not reproduce the consumer ChatGPT, Claude.ai or Grok applications.
 
@@ -17,39 +17,39 @@ cd /Users/otto/Local/personal/parallax
 
 Open [Parallax](http://127.0.0.1:8310). The launcher installs the locked Python dependencies and builds the frontend if no build exists. It binds only to this computer. To use another port, set `PARALLAX_PORT=8311`.
 
-**Demo works without keys.** It runs the actual outer workflow with clearly labeled sample data, not generated answers. Arbitrary questions in Demo still receive the same illustrative findings.
+To start chatting:
 
-For live research:
+1. Open **Settings** and save an [OpenRouter key](https://openrouter.ai/settings/keys).
+2. Send a message. **Auto** is the default: greetings and ordinary questions get a direct reply from the selected chat model. Questions needing current information go to the research team.
+3. Use message options to choose **Chat** (no search), **Research** (always use the team), research depth or shared context. Configure the 2–4 research models and comparison model in Settings.
 
-1. Open **Settings**.
-2. Save an [OpenRouter key](https://openrouter.ai/settings/keys) and a [Tavily key](https://app.tavily.com).
-3. Configure tool-capable model IDs and a comparison model in Settings. Select 2–4 researchers using the model buttons below the question box.
-4. Switch **Demo mode** to **Live research** and ask your question.
+OpenRouter also supplies web search through its [web search server tool](https://openrouter.ai/docs/guides/features/server-tools/web-search), so no additional search key is required. [Tavily](https://app.tavily.com) remains an optional alternative. Missing credentials produce an actionable error; the interface never silently switches to sample responses. Legacy Demo rounds remain labeled in saved history, and the internal demo API is retained for tests.
 
 Saving keys does not start a model call. “Key saved” indicates configuration, not a verified connection. Live research uses API credits; consumer chat subscriptions are separate. The app also refreshes OpenRouter's public model catalog when Settings opens.
 
-Alternatively, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY` and `TAVILY_API_KEY`. Locally saved Settings values take precedence over environment values. Credentials entered through Settings live in `data/credentials.json`, with owner-only file permissions. They are stored as plaintext locally and are never returned to the browser or included in research prompts. Do not expose this local app as a public server.
+Alternatively, copy `.env.example` to `.env` and set `OPENROUTER_API_KEY`. `TAVILY_API_KEY` is optional. Locally saved Settings values take precedence over environment values. Credentials entered through Settings live in `data/credentials.json`, with owner-only file permissions. They are stored as plaintext locally and are never returned to the browser or included in research prompts. Do not expose this local app as a public server.
 
 ## What works
 
-- Fixed LangGraph fan-out: every selected researcher starts before comparison.
+- A conversational model responds directly or calls a typed research handoff, using recent conversation history to resolve follow-ups. No research panel is started for ordinary chat.
+- Fixed LangGraph fan-out for research: every selected researcher starts before comparison.
 - A separate Deep Agents instance and in-memory filesystem per researcher; no sibling answers, shared scratch files, host-file access or nested delegation.
-- Each live researcher can repeatedly search Tavily and fetch public text pages, including further chunks of long pages.
+- Each researcher searches through OpenRouter (or Tavily when configured) and reads public text pages, including further chunks of long pages. The OpenRouter search helper returns source annotations, never promotes uncited generated links to evidence, and caps searches to one per helper request with at most five results.
 - A separate comparison agent can check sources and returns the answer, agreement, disagreement, next steps and limitations.
 - Original answers, source URLs/excerpts, retrieval times, activity, reported token usage and errors remain inspectable.
 - Search snippets and pages actually fetched have different labels. Fetching is not presented as fact verification.
-- Saved conversations, follow-up questions, shared context and a **Fresh round** option.
+- Saved conversations, follow-up questions, shared context and a **Skip conversation history** option.
 - Cancellation, partial failures, reconnectable event streams and JSON export.
 - Configurable models through the current public OpenRouter catalog or manually entered IDs. No model substitution is intentionally requested.
 - Responsive layout and keyboard navigation. Enter sends; Shift+Enter adds a line; Cmd/Ctrl+K opens a new conversation.
 
-The main screen keeps the question box and model selection visible. **Options** holds shared context, research depth and Fresh round. Open conversation history from the top-left button; expand **Research activity** beneath a result for progress, limits and logs. Comparison, Originals and Sources remain available as result tabs.
+The main screen is a message thread and composer, with the chat model and Auto mode visible. Research produces one conversational answer. **Research details** under that reply holds sources, original answers, disagreements and export. The conversation drawer preserves the full thread, rather than replacing prior messages with report tabs.
 
 Dark mode is the default. Use the sun/moon button in the header to switch themes; your preference is saved in this browser and applied before the app paints.
 
 ## Independence and history
 
-Researchers get identical current questions and shared user context. Follow-ups include recent user questions and only that model's own prior final answers, capped to the last eight history messages and 18,000 characters per prior answer. They never receive sibling findings or the previous combined answer. **Fresh round** omits that history. Demo findings are excluded from live history.
+The chat model sees up to twelve recent conversational messages, including combined research replies, and can resolve a follow-up into a self-contained question. Researchers get the same resolved question and shared user context. Follow-ups include recent user questions and only that model's own prior final answers, capped to the last eight history messages and 18,000 characters per prior answer. They never receive sibling findings or the previous combined answer. **Skip conversation history** omits that history. Demo findings are excluded from live history.
 
 The Deep Agents filesystem backend is new for each researcher and round. Scratch notes and the full internal agent state do not persist between rounds. SQLite locally, or Postgres on Vercel, preserves original final answers, collected source records, events and run settings. The comparison receives the reports only after all researchers finish or fail.
 
@@ -57,16 +57,16 @@ The Deep Agents filesystem backend is new for each researcher and round. Scratch
 
 | Mode | Model calls per researcher | Web actions per researcher | Researcher timeout |
 | --- | --- | --- | --- |
-| Standard | 8 | 12 | 180 seconds |
+| Standard | 6 | 6 | 180 seconds |
 | Deeper | 12 | 24 | 360 seconds |
 
-The comparison gets up to 7 model calls in Standard, 10 in Deeper, 10 web actions and 240 seconds. Each model response is capped at 4,500 output tokens. At most two rounds run concurrently. These are work limits, **not a guaranteed dollar spending cap**; retries, reasoning, input tokens and provider pricing affect billing. Use provider-side credit limits as appropriate. Stopping cancels remaining work; provider requests already in flight may still be billed.
+The chat/routing call has a 70-second budget. The comparison gets up to 7 model calls in Standard, 10 in Deeper, 10 web actions and 240 seconds. Each model response is capped at 4,500 output tokens. OpenRouter search adds a bounded helper model request (up to 1,800 output tokens) and search charges per search action; these helper calls are separate from the researcher model-call budget. At most two rounds run concurrently. These are work limits, **not a guaranteed dollar spending cap**; retries, reasoning, input tokens and provider pricing affect billing. Use provider-side credit limits as appropriate. Stopping cancels remaining work; provider requests already in flight may still be billed.
 
 The reader supports text/HTML/JSON/XML over public HTTP(S), with a 2 MB response cap and 18,000-character chunks. PDFs, paywalls, image understanding, calculators, JavaScript-driven browsing and uploads are not implemented. Failed source access is visible to agents. Source records retain an excerpt, not an archival copy of the full page.
 
 Citation cleanup checks generated Markdown links and source IDs against the collected source ledgers. It does not prove a cited source supports a claim. The comparison is still an AI interpretation. The system is instructed to preserve useful dissent and uncertainty rather than use majority vote as proof.
 
-Locally, completed answers survive a restart and in-flight rounds become **interrupted**. On Vercel, research runs use a durable queue and Postgres. Worker retries reuse completed researcher reports; an in-flight provider request may be repeated after a crash and can incur additional charges. Full agent scratch state is not checkpointed. API failures and missing credits remain visible. End-to-end paid provider behavior and answer quality still need live evaluation with valid keys.
+Locally, completed answers survive a restart and in-flight rounds become **interrupted**. On Vercel, research runs use a durable queue and Postgres. Worker retries reuse completed researcher reports; an in-flight provider request may be repeated after a crash and can incur additional charges. Full agent scratch state is not checkpointed. API failures and missing credits remain visible. Answer quality and routing still need ongoing evaluation; automated tests use deterministic doubles. Live smoke checks cover a real greeting and a three-model travel research question.
 
 ## Vercel deployment
 
@@ -75,8 +75,8 @@ The repository deploys as one FastAPI project, with the Vite assets built during
 1. Import `ottobonilla95/parallax` into the personal Vercel workspace, using the repository root and the FastAPI framework.
 2. Connect a separate Neon Postgres database. Use separate database branches for Production and Preview so preview testing cannot change production conversations. The integration supplies `DATABASE_URL`.
 3. Set **Vercel Authentication → All Deployments**, including production, before using the hosted app. This is a private, single-owner research workspace with shared history and provider keys, not a multi-user service. Do not disable protection or expose the backend separately.
-4. Configure `OPENROUTER_API_KEY` and `TAVILY_API_KEY` in the project's environment variables. Hosted Settings shows connection status but cannot write credentials to a local file. Secrets are never sent in queue messages.
-5. Deploy and verify a Demo round, event reconnection, saved history and cancellation before making paid model calls. Missing provider keys leave Demo usable and live research disabled.
+4. Configure `OPENROUTER_API_KEY` (and optionally `TAVILY_API_KEY`) in the project's environment variables. Hosted Settings shows connection status but cannot write credentials to a local file. Secrets are never sent in queue messages.
+5. Deploy and verify a greeting, automatic research, event reconnection, saved history and cancellation. Only OpenRouter is required for live chat and research. The frontend never substitutes Demo answers for user messages.
 
 The hosted API uses Postgres for concurrency limits, job leases, cancellation, events and results. New server instances do not interrupt active jobs. A worker keeps a renewable lease and can only write while it still owns the round. Queue delivery retries up to three times; completed runs are idempotent. Research has a 690-second overall worker timeout. Expired abandoned jobs are marked interrupted when the app is next accessed. The queue publishes only saved run IDs and handles work independently from the browser connection.
 
@@ -99,6 +99,7 @@ Tests exercise the real Deep Agents loop with scripted models, parallel workflow
 
 ## Project files
 
+- `parallax/conversation.py`: conversational reply and typed research routing.
 - `parallax/engine.py`: Deep Agents researchers and the fixed LangGraph workflow.
 - `parallax/web.py`: bounded search, public source reading and source ledgers.
 - `parallax/storage.py`: SQLite/Postgres conversations, rounds, events and worker leases.

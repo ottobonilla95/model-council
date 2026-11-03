@@ -30,3 +30,8 @@ History   Parallax / New                      Mode   Theme   Settings
 The familiar chat composition is intentional: the task is asking and comparing. Distinction comes from the viewing-plane mark, type, and precise control grouping rather than adding a landing page, decorative gradients, or cards unrelated to research.
 
 On narrow screens the heading wraps, keyboard guidance recedes, model controls wrap, and the new-conversation action remains in the history drawer. Research views retain horizontal tab scrolling. Keep visible focus, semantic control names, reduced-motion support, and at least 16px mobile form input text.
+
+
+## Chat-first behavior (3 November 2026)
+
+The user's primary action is sending a message. Preserve the dark palette, Manrope typography and Parallax mark. Show a continuous thread with compact right-aligned user messages and unboxed assistant prose. Everyday chat has no research tabs, budgets or sample banners. The composer shows the selected chat model and Auto options; research-team configuration stays in Settings. Research replies use the same message layout, with original answers, sources and disagreements behind a single disclosure. Never automatically substitute demo data for user messages.

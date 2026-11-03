@@ -57,8 +57,10 @@ def app_config():
         "managed_credentials": config.hosted(),
         "models": config.DEFAULT_MODELS,
         "judge": config.DEFAULT_MODELS[0]["id"],
+        "chat_model": "google/gemini-3.8-flash",
+        "search_provider": "tavily" if credentials["tavily"] else "openrouter",
         "limits": {
-            "standard": {"model_calls": 8, "tool_calls": 12, "seconds": 180},
+            "standard": {"model_calls": 6, "tool_calls": 6, "seconds": 180},
             "deep": {"model_calls": 12, "tool_calls": 24, "seconds": 360},
         },
     }
@@ -110,9 +112,9 @@ def session(session_id: str):
 async def start(request: RunRequest):
     storage.expire_abandoned()
     credentials = config.keys()
-    if not request.demo and not all(credentials.values()):
+    if not request.demo and not credentials["openrouter"]:
         location = "Vercel environment variables" if config.hosted() else "Settings"
-        raise HTTPException(400, f"Connect OpenRouter and Tavily in {location}, or turn on Demo.")
+        raise HTTPException(400, f"Add your OpenRouter key in {location} to start chatting.")
     histories = (
         {model: storage.research_history(request.session_id, model) for model in request.models}
         if request.session_id and not request.fresh

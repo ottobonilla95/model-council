@@ -255,6 +255,24 @@ def completed_reports(run_id):
     return reports
 
 
+def conversation_history(session_id, exclude_run=None):
+    """The assistant sees the conversation; independent researchers keep their own history."""
+    result = []
+    for run in session_runs(session_id):
+        if run["id"] == exclude_run or run["request"].get("demo"):
+            continue
+        saved = run.get("result") or {}
+        answer = saved.get("answer") or (saved.get("comparison") or {}).get("answer")
+        if answer:
+            result.extend(
+                [
+                    {"role": "user", "content": run["request"]["question"]},
+                    {"role": "assistant", "content": answer[:12000]},
+                ]
+            )
+    return result[-12:]
+
+
 def research_history(session_id, model, exclude_run=None):
     """Only user turns and this model's own findings; never the synthesis/siblings."""
     result = []
