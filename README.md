@@ -53,6 +53,18 @@ The chat model sees up to twelve recent conversational messages, including combi
 
 The Deep Agents filesystem backend is new for each researcher and round. Scratch notes and the full internal agent state do not persist between rounds. SQLite locally, or Postgres on Vercel, preserves original final answers, collected source records, events and run settings. The comparison receives the reports only after all researchers finish or fail.
 
+## Personal settings and memory
+
+Open **Settings** or your avatar → **Personal settings** to set a preferred name, response instructions and time zone. These settings sync through your account. Model selection and provider connections are under **Manage models**; existing browser-only background context is separate.
+
+Parallax uses a bounded **semantic profile**: up to 50 concise facts and preferences per account, persisted in SQLite locally or Postgres on Vercel. This is fact memory, not embedding-based semantic search. The small profile is included in chat, independent research and comparison context; models are instructed to use details only when relevant. No additional database, embedding API or credentials are needed. Existing short-term conversation history remains separate. We do not automatically summarize old chats or retain agent reasoning as episodic memory, and models cannot rewrite their own system instructions.
+
+**Use saved memories** controls both recall and learning. **Learn from our chats** can be paused separately while keeping recall enabled. Both are initially enabled. The helper reads only each new user message and that account’s saved memories, never web pages or assistant answers. It extracts stable, explicitly stated details, skips sensitive information by instruction, requires verbatim supporting evidence, and filters common secret/identifier patterns. Extraction is probabilistic: review incorrect facts in settings. A small **Memory updated** link appears under the reply when details are saved.
+
+The helper uses the selected chat model, makes at most one additional model call per nontrivial message, and has a 12-second timeout. It runs alongside the reply; a memory failure leaves the answer available and shows a brief notice. Helper usage is additional to research budgets and uses the instance’s API credits. Greetings skip the helper. Manual edits are protected from automatic replacement. Corrections can replace automatically learned facts rather than accumulating contradictory entries. Full memory stops accepting new entries without silently evicting existing facts.
+
+You can add, edit, forget individual memories, or forget all. Turning memory off preserves the stored facts. Forgetting removes saved facts from future cross-chat context; original messages remain in their conversations and can still appear in the current chat’s history. Old messages are not rescanned. In-flight extraction is invalidated when settings/memories change, so a pending helper cannot restore a just-forgotten entry. Account namespaces, authenticated/CSRF-protected endpoints, run ownership, lease checks and per-run deduplication prevent cross-user writes and retry duplication. Administrators have no endpoint to inspect other users’ memories. The unauthenticated loopback workspace uses its own local memory namespace, separate from signed-in accounts.
+
 ## Limits in this version
 
 | Mode | Model calls per researcher | Web actions per researcher | Researcher timeout |
@@ -100,6 +112,7 @@ Tests exercise the real Deep Agents loop with scripted models, parallel workflow
 ## Project files
 
 - `parallax/auth.py` and `parallax/accounts.py`: Google OIDC, revocable login sessions, account roles and administration.
+- `parallax/memory.py`: account preferences, semantic profile storage, evidenced learning and correction controls.
 - `parallax/conversation.py`: conversational reply and typed research routing.
 - `parallax/engine.py`: Deep Agents researchers and the fixed LangGraph workflow.
 - `parallax/web.py`: bounded search, public source reading and source ledgers.

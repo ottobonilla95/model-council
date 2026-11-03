@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import accounts, auth, config, storage
+from . import accounts, auth, config, memory, storage
 from .engine import execute_run
 from .schemas import RunRequest
 
@@ -109,6 +109,45 @@ async def models(user=Depends(auth.current_user)):
         }
     except (httpx.HTTPError, KeyError):
         return {"models": config.DEFAULT_MODELS, "warning": "Could not refresh catalog; showing configured defaults."}
+
+
+@app.get("/api/me/settings")
+def personal_settings(user=Depends(auth.current_user)):
+    return memory.get(user["id"])
+
+
+@app.put("/api/me/settings")
+def save_personal_settings(values: memory.Preferences, user=Depends(auth.current_user)):
+    return memory.save_settings(user["id"], values)
+
+
+@app.post("/api/me/memories", status_code=201)
+def add_memory(values: memory.MemoryText, user=Depends(auth.current_user)):
+    try:
+        return memory.write(user["id"], values.text)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+
+
+@app.patch("/api/me/memories/{memory_id}")
+def edit_memory(memory_id: str, values: memory.MemoryText, user=Depends(auth.current_user)):
+    try:
+        return memory.write(user["id"], values.text, memory_id)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@app.delete("/api/me/memories/{memory_id}")
+def forget_memory(memory_id: str, user=Depends(auth.current_user)):
+    try:
+        return memory.forget(user["id"], memory_id)
+    except LookupError as error:
+        raise HTTPException(404, str(error)) from None
+
+
+@app.delete("/api/me/memories")
+def forget_memories(user=Depends(auth.current_user)):
+    return memory.forget(user["id"])
 
 
 @app.get("/api/sessions")

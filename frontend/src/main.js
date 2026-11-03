@@ -13,6 +13,7 @@ let config;
 let authState;
 let page = 'chat';
 let usersData = null;
+let personalData = null;
 let prefsKey = 'parallax-preferences';
 let sessions = [];
 let sessionId = null;
@@ -43,7 +44,7 @@ function notify(message) {
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...(authState?.csrf_token ? { 'X-CSRF-Token': authState.csrf_token } : {}), ...options.headers } });
   const data = await response.json();
-  if (response.status === 401 && authState?.user) { stream?.close(); authState.user = null; sessions = []; rounds = []; current = null; sessionId = null; draft = ''; context = ''; document.querySelectorAll('dialog').forEach(d => d.close()); renderSignIn('Your session ended. Sign in to continue.'); }
+  if (response.status === 401 && authState?.user) { stream?.close(); authState.user = null; sessions = []; rounds = []; current = null; sessionId = null; draft = ''; context = ''; personalData = null; usersData = null; document.querySelectorAll('dialog').forEach(d => d.close()); renderSignIn('Your session ended. Sign in to continue.'); }
   if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.[0]?.msg || 'The request could not be completed.');
   return data;
 }
@@ -107,11 +108,12 @@ function shell() {
     </aside>
     <main class="main ${current ? 'has-results' : 'empty'}">
       <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="brand">${brandMark}<span class="app-name">Parallax</span></span><button class="icon-button header-new" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right">${accountMenu()}${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
-      ${page === 'users' ? '<div id="user-management" class="user-management"></div>' : `<div class="chat-surface"><div id="desk"></div>
+      ${page === 'personal' ? '<div id="personal-settings" class="user-management personal-settings"></div>' : page === 'users' ? '<div id="user-management" class="user-management"></div>' : `<div class="chat-surface"><div id="desk"></div>
       <div class="composer-area"><div id="composer"></div><p class="composer-footnote">Parallax can make mistakes. Check important sources.</p></div></div>`}
     </main>
   </div>`;
-  if (page === 'users') renderUsers();
+  if (page === 'personal') renderPersonal();
+  else if (page === 'users') renderUsers();
   else { renderDesk(); renderComposer(); }
   decorate();
   syncNavigation();
@@ -125,6 +127,7 @@ function syncNavigation() {
 }
 function renderComposer() {
   const container = document.querySelector('#composer');
+  if (!container) return;
   const models = [...new Set([...modelSlots, ...selected, chatModel])].filter(Boolean);
   container.innerHTML = `<div class="composer-panel"><form class="composer ${running() ? 'busy' : ''}" id="question-form">
     <label class="sr-only" for="question">Your message</label>
@@ -133,7 +136,7 @@ function renderComposer() {
       <label class="depth-select">Mode<select id="mode" aria-label="Response mode" ${running() ? 'disabled' : ''}><option value="auto" ${mode === 'auto' ? 'selected' : ''}>Auto — search when needed</option><option value="chat" ${mode === 'chat' ? 'selected' : ''}>Chat — no web search</option><option value="research" ${mode === 'research' ? 'selected' : ''}>Research — use the team</option></select></label>
       <button type="button" class="composer-option" data-action="context">${ico('plus')} ${context ? 'Edit context' : 'Add context'}</button>
       <label class="depth-select">Research depth<select id="depth" aria-label="Research depth" ${running() ? 'disabled' : ''}><option value="standard" ${depth === 'standard' ? 'selected' : ''}>Standard</option><option value="deep" ${depth === 'deep' ? 'selected' : ''}>Deeper</option></select></label>
-      <button type="button" class="composer-option" data-action="settings">${ico('layers-3')} Research team (${selected.length} models)</button>
+      <button type="button" class="composer-option" data-action="models">${ico('layers-3')} Research team (${selected.length} models)</button>
       ${current ? `<button type="button" class="fresh-toggle ${fresh ? 'on' : ''}" data-action="fresh" aria-pressed="${fresh}">${ico('rotate-ccw')} Skip conversation history</button>` : ''}
     </div></details></div><span class="composer-shortcut"><kbd>Enter</kbd> to send</span>${running() ? `<button class="send-button stop" type="button" data-action="stop" aria-label="Stop response">${ico('square')}</button>` : `<button class="send-button" type="submit" aria-label="Send message" ${sending || !draft.trim() ? 'disabled' : ''}>${ico(sending ? 'loader-circle' : 'arrow-up', sending ? 'spin' : '')}</button>`}</div>
   </form></div>`;
@@ -151,6 +154,7 @@ function researchDetails(run) {
 }
 function renderDesk() {
   const desk = document.querySelector('#desk');
+  if (!desk) return;
   const nearBottom = desk.scrollHeight - desk.scrollTop - desk.clientHeight < 100;
   const open = new Set([...desk.querySelectorAll('[data-evidence][open]')].map(e => e.dataset.evidence));
   if (!current) {
@@ -163,7 +167,7 @@ function renderDesk() {
     const isRunning = run.status === 'running';
     const answer = run.answer || run.comparison?.answer;
     const status = run.mode === 'research' ? run.comparing ? 'Comparing findings…' : 'Researching with your team…' : 'Thinking…';
-    return `<article class="chat-turn"><div class="user-message"><span class="sr-only">You</span><div>${esc(run.request.question)}</div></div><div class="assistant-message"><div class="assistant-label">${brandMark}<span>Parallax</span>${run.request.demo ? '<span class="sample-label">Saved demo</span>' : ''}</div>${answer ? `<div class="markdown">${md(answer)}</div>` : isRunning ? `<p class="response-status" role="status">${ico('loader-circle','spin')}${status}</p>` : `<p class="answer-note">${esc(run.message || 'This response stopped. Send another message to continue.')}</p>`}${run.mode === 'research' && (Object.keys(run.reports).length || sourceList(run).length) ? researchDetails(run) : ''}${run.id === current.id && answer && !isRunning ? `<div class="message-actions"><button data-action="copy" aria-label="Copy response">${ico('copy')}</button></div>` : ''}</div></article>`;
+    return `<article class="chat-turn"><div class="user-message"><span class="sr-only">You</span><div>${esc(run.request.question)}</div></div><div class="assistant-message"><div class="assistant-label">${brandMark}<span>Parallax</span>${run.request.demo ? '<span class="sample-label">Saved demo</span>' : ''}</div>${answer ? `<div class="markdown">${md(answer)}</div>` : isRunning ? `<p class="response-status" role="status">${ico('loader-circle','spin')}${status}</p>` : `<p class="answer-note">${esc(run.message || 'This response stopped. Send another message to continue.')}</p>`}${run.mode === 'research' && (Object.keys(run.reports).length || sourceList(run).length) ? researchDetails(run) : ''}${run.memorySaved ? `<button class="memory-receipt" data-action="settings">${ico('check')} ${run.memorySaved === 1 ? 'Memory updated' : `${run.memorySaved} memories updated`}</button>` : run.memoryUnavailable ? '<span class="memory-receipt">Memory could not update this time.</span>' : ''}${run.id === current.id && answer && !isRunning ? `<div class="message-actions"><button data-action="copy" aria-label="Copy response">${ico('copy')}</button></div>` : ''}</div></article>`;
   }).join('')}</section>`;
   desk.querySelectorAll('[data-evidence]').forEach(e => { if (open.has(e.dataset.evidence)) e.open = true; });
   decorate();
@@ -190,6 +194,8 @@ function applyEvent(event, render = true, target = current) {
     case 'researcher_done': target.reports[event.agent] = event.report; target.sources[event.agent] = event.report.sources; target.usage[event.agent] = event.report.usage; break;
     case 'comparison_start': target.comparing = true; break;
     case 'comparison_done': target.comparison = event.comparison; target.sources.judge = event.sources; target.usage.judge = event.usage; break;
+    case 'memory_saved': target.memorySaved = event.count; break;
+    case 'memory_unavailable': target.memoryUnavailable = true; break;
     case 'done': target.status = 'completed'; break;
     case 'cancelled': case 'interrupted': case 'error': target.status = event.type === 'error' ? 'failed' : event.type; target.message = event.message; break;
   }
@@ -214,7 +220,7 @@ async function refreshSessions() {
 }
 async function submit(question) {
   if (running() || sending || !question.trim()) return;
-  if (!config.keys.openrouter) { notify('Add your OpenRouter key to start chatting.'); openSettings(); return; }
+  if (!config.keys.openrouter) { notify('Add your OpenRouter key to start chatting.'); openModelSettings(); return; }
   sending = true;
   renderComposer();
   try {
@@ -273,8 +279,8 @@ function modal(content, wide = false) {
   decorate();
   return dialog;
 }
-function openSettings() {
-  const dialog = modal(`<div class="modal-header"><div><h2>Settings</h2><p>Connect providers and manage your models.</p></div><button class="icon-button" data-close aria-label="Close settings">${ico('x')}</button></div><form id="settings-form"><section class="settings-section"><h3>Connections</h3><p>${config.managed_credentials ? 'OpenRouter connects chat and web research. Tavily is an optional search provider. Keys are managed in Vercel.' : 'OpenRouter connects chat and web research. Tavily is optional. Keys are saved locally on this app’s server.'}</p><label class="key-label">OpenRouter <span>${config.keys.openrouter ? 'Key saved' : 'No key saved'}</span><input type="password" name="openrouter" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.openrouter ? 'Saved · enter a new key to replace' : 'Paste your OpenRouter API key'}" /></label><label class="key-label">Tavily search (optional) <span>${config.keys.tavily ? 'Key saved' : 'No key saved'}</span><input type="password" name="tavily" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.tavily ? 'Saved · enter a new key to replace' : 'Paste your Tavily API key'}" /></label><div class="provider-links"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">Get an OpenRouter key ${ico('external-link')}</a><a href="https://app.tavily.com" target="_blank" rel="noreferrer">Get a Tavily key ${ico('external-link')}</a></div></section><section class="settings-section"><div class="section-title"><h3>Independent researchers</h3><span>Choose 2–4</span></div><p>Every selected model gets its own research loop and private notes.</p><div class="model-settings">${config.models.map((m, index) => { const currentId = modelSlots[index] || m.id; return `<label class="model-setting"><input type="checkbox" name="enabled-${index}" ${selected.includes(currentId) ? 'checked' : ''} />${modelChip(currentId)}<input type="text" name="model-${index}" aria-label="Researcher ${index+1} model ID" list="model-catalog" value="${esc(currentId)}" /></label>`; }).join('')}</div><datalist id="model-catalog"></datalist><label class="judge-label">Comparison model<input type="text" name="judge" list="model-catalog" value="${esc(judge)}" required /></label><p class="settings-hint">Use any tool-capable OpenRouter model ID. The comparison model can also check sources.</p></section><div id="settings-error" class="form-error" role="alert"></div><div class="modal-footer"><span>Live runs use paid API credits.</span><button class="primary-button" type="submit">Save settings ${ico('check')}</button></div></form>`, true);
+function openModelSettings() {
+  const dialog = modal(`<div class="modal-header"><div><h2>Models & connections</h2><p>Connect providers and manage your models.</p></div><button class="icon-button" data-close aria-label="Close settings">${ico('x')}</button></div><form id="settings-form"><section class="settings-section"><h3>Connections</h3><p>${config.managed_credentials ? 'OpenRouter connects chat and web research. Tavily is an optional search provider. Keys are managed in Vercel.' : 'OpenRouter connects chat and web research. Tavily is optional. Keys are saved locally on this app’s server.'}</p><label class="key-label">OpenRouter <span>${config.keys.openrouter ? 'Key saved' : 'No key saved'}</span><input type="password" name="openrouter" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.openrouter ? 'Saved · enter a new key to replace' : 'Paste your OpenRouter API key'}" /></label><label class="key-label">Tavily search (optional) <span>${config.keys.tavily ? 'Key saved' : 'No key saved'}</span><input type="password" name="tavily" ${config.managed_credentials ? 'disabled' : ''} autocomplete="off" placeholder="${config.keys.tavily ? 'Saved · enter a new key to replace' : 'Paste your Tavily API key'}" /></label><div class="provider-links"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noreferrer">Get an OpenRouter key ${ico('external-link')}</a><a href="https://app.tavily.com" target="_blank" rel="noreferrer">Get a Tavily key ${ico('external-link')}</a></div></section><section class="settings-section"><div class="section-title"><h3>Independent researchers</h3><span>Choose 2–4</span></div><p>Every selected model gets its own research loop and private notes.</p><div class="model-settings">${config.models.map((m, index) => { const currentId = modelSlots[index] || m.id; return `<label class="model-setting"><input type="checkbox" name="enabled-${index}" ${selected.includes(currentId) ? 'checked' : ''} />${modelChip(currentId)}<input type="text" name="model-${index}" aria-label="Researcher ${index+1} model ID" list="model-catalog" value="${esc(currentId)}" /></label>`; }).join('')}</div><datalist id="model-catalog"></datalist><label class="judge-label">Comparison model<input type="text" name="judge" list="model-catalog" value="${esc(judge)}" required /></label><p class="settings-hint">Use any tool-capable OpenRouter model ID. The comparison model can also check sources.</p></section><div id="settings-error" class="form-error" role="alert"></div><div class="modal-footer"><span>Live runs use paid API credits.</span><button class="primary-button" type="submit">Save settings ${ico('check')}</button></div></form>`, true);
   api('/api/models').then(data => {
     const list = dialog.querySelector('#model-catalog');
     if (list) list.innerHTML = data.models.map(m => `<option value="${esc(m.id)}">${esc(m.name)}</option>`).join('');
@@ -318,7 +324,8 @@ document.addEventListener('click', async e => {
     case 'signout': try { await post('/api/auth/logout', {}); location.replace('/'); } catch (err) { notify(err.message); } break;
     case 'toggle-nav': mobileNav = !mobileNav; document.querySelector('.workspace').classList.toggle('nav-open', mobileNav); syncNavigation(); document.querySelector(mobileNav ? '.drawer-heading button' : '.history-toggle')?.focus(); break;
     case 'theme': toggleTheme(); break;
-    case 'settings': openSettings(); break;
+    case 'settings': await openPersonal(); break;
+    case 'models': openModelSettings(); break;
     case 'reload': location.reload(); break;
     case 'context': openContext(); break;
     case 'fresh': fresh = !fresh; renderComposer(); break;
@@ -348,13 +355,98 @@ function loadAccountPrefs() {
 function accountMenu() {
   if (!authState?.user) return '';
   const user = authState.user;
-  return `<details class="account-menu"><summary aria-label="Your account" title="Your account"><span class="account-avatar">${esc(user.name.slice(0,1).toUpperCase())}</span></summary><div class="account-panel"><strong>${esc(user.name)}</strong><span>${esc(user.email)}</span>${user.role === 'admin' ? `<button data-action="users">Manage users ${ico('arrow-up-right')}</button>` : ''}${authState.required ? `<button data-action="signout">Sign out ${ico('arrow-up-right')}</button>` : ''}</div></details>`;
+  return `<details class="account-menu"><summary aria-label="Your account" title="Your account"><span class="account-avatar">${esc((personalData?.settings.display_name || user.name).slice(0,1).toUpperCase())}</span></summary><div class="account-panel"><strong>${esc(personalData?.settings.display_name || user.name)}</strong><span>${esc(user.email)}</span><button data-action="settings">Personal settings ${ico('settings-2')}</button>${user.role === 'admin' ? `<button data-action="users">Manage users ${ico('arrow-up-right')}</button>` : ''}${authState.required ? `<button data-action="signout">Sign out ${ico('arrow-up-right')}</button>` : ''}</div></details>`;
 }
 function renderSignIn(message = '') {
   const errors = { configuration: 'Google sign-in is being configured. Please try again shortly.', signin: 'Google sign-in did not finish. Please try again.', verification: 'Use a Gmail or Google Workspace account with a verified email address.', disabled: 'Your account is disabled. Contact your Parallax administrator.', invite: 'Ask the Parallax administrator to create your account first.' };
   const code = new URLSearchParams(location.search).get('auth_error');
   message ||= errors[code] || '';
   app.innerHTML = `<main class="signin-page"><header class="signin-header"><span class="brand">${brandMark}<span>Parallax</span></span>${themeButton()}</header><section class="signin-content"><div class="signin-mark">${brandMark}</div><h1>A space for your curiosity.</h1><p>Sign in to keep your conversations together,<br class="desktop-break"> wherever you pick them up.</p>${message ? `<p class="signin-error" role="alert">${esc(message)}</p>` : ''}${authState.configured ? `<a class="google-signin" href="/auth/google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.74 2.98-4.31 2.98-7.36Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.04.97-3.38.97-2.6 0-4.81-1.76-5.6-4.12H3.06v2.59A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93a6 6 0 0 1 0-3.86V7.48H3.06a10 10 0 0 0 0 9.04l3.34-2.59Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.51 3.83 1.51l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.94 5.48l3.34 2.59c.79-2.36 3-4.12 5.6-4.12Z"/></svg>Continue with Google</a>` : `<p class="signin-error">Sign-in setup is in progress. Please check back shortly.</p><button class="text-button" data-action="reload">Refresh</button>`}<small>${authState.allow_signup ? 'New here? Your account is created when you sign in.' : 'Use the Google email your administrator added.'}</small></section><footer class="signin-footer">Your conversations are private to your account. <a href="/privacy">Privacy</a></footer></main>`;
+  decorate();
+}
+
+async function openPersonal() {
+  if (!authState?.user) return;
+  page = 'personal'; mobileNav = false; personalData = null; shell();
+  try { personalData = await api('/api/me/settings'); if (page === 'personal') renderPersonal(); }
+  catch (error) { const root = document.querySelector('#personal-settings'); if (root) root.innerHTML = `<p role="alert">${esc(error.message)}</p><button class="text-button" data-action="settings">Try again</button>`; }
+}
+function refreshMemoryView(focusSelector = '#new-memory') {
+  const form = document.querySelector('#personal-form');
+  const root = document.querySelector('#personal-settings');
+  const scrollTop = root?.scrollTop || 0;
+  const values = form ? { display_name: form.elements.display_name.value, instructions: form.elements.instructions.value, timezone: form.elements.timezone.value, memory_enabled: form.elements.memory_enabled.checked, auto_memory: form.elements.auto_memory.checked } : null;
+  renderPersonal();
+  if (values) {
+    const next = document.querySelector('#personal-form');
+    for (const key of ['display_name', 'instructions', 'timezone']) next.elements[key].value = values[key];
+    for (const key of ['memory_enabled', 'auto_memory']) next.elements[key].checked = values[key];
+    next.elements.auto_memory.disabled = !values.memory_enabled;
+  }
+  if (root) root.scrollTop = scrollTop;
+  document.querySelector(focusSelector)?.focus({ preventScroll: true });
+}
+function renderPersonal() {
+  const root = document.querySelector('#personal-settings');
+  if (!root) return;
+  if (!personalData) { root.innerHTML = '<p role="status">Loading your settings…</p>'; return; }
+  const p = personalData.settings;
+  root.innerHTML = `<button class="text-button back-to-chat" data-action="back-chat">${ico('arrow-left')} Back to chat</button>
+    <div class="users-heading"><h1>Personal settings</h1><p>A little context, so each conversation starts closer to you.</p></div>
+    <form id="personal-form"><section class="personal-section"><h2>About you</h2><div class="personal-fields">
+      <label>What should I call you?<input name="display_name" maxlength="120" autocomplete="nickname" placeholder="Your preferred name" value="${esc(p.display_name)}"></label>
+      <label>Time zone<input name="timezone" maxlength="80" list="timezones" placeholder="Automatic (${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)})" value="${esc(p.timezone)}"><span>Leave blank to use this device’s time zone.</span></label>
+      </div><datalist id="timezones">${(Intl.supportedValuesOf?.('timeZone') || []).map(z => `<option value="${esc(z)}"></option>`).join('')}</datalist>
+      <label class="personal-instructions">How would you like me to respond?<textarea name="instructions" rows="3" maxlength="2000" placeholder="For example: Keep answers concise, use metric units, and explain the tradeoffs.">${esc(p.instructions)}</textarea><span>Applied across chats and your research team.</span></label></section>
+    <section class="personal-section"><h2>Memory</h2>
+      <label class="preference-row"><span><strong>Use saved memories</strong><small>Bring useful facts and preferences into new conversations.</small></span><input type="checkbox" name="memory_enabled" ${p.memory_enabled ? 'checked' : ''}></label>
+      <label class="preference-row"><span><strong>Learn from our chats</strong><small>Remember useful details you share in new messages. Changes appear below your reply.</small></span><input type="checkbox" name="auto_memory" ${p.auto_memory ? 'checked' : ''} ${!p.memory_enabled ? 'disabled' : ''}></label>
+      <p class="settings-hint">Turning off <strong>Use saved memories</strong> stops recall and learning, but keeps the saved details. Turning off only <strong>Learn from our chats</strong> stops new automatic saves; existing memories still personalize replies.</p><p class="settings-hint">Saved to ${authState.required ? 'your account, across devices' : 'this local workspace'} and shared with your selected AI providers. Learning uses an additional model call. Messages already in the current chat remain in its history.</p>
+    </section><div class="personal-save"><p id="personal-error" class="form-error" role="alert"></p><button type="submit" class="primary-button">Save preferences ${ico('check')}</button></div></form>
+    <section class="personal-section saved-memory-section"><div class="section-title"><h2>What Parallax remembers</h2><span>${personalData.memories.length} / ${personalData.limit}</span></div>
+      <p class="settings-hint">Stable facts and preferences, rather than a copy of every conversation. Keep secrets and sensitive details out of saved memory. Review anything it gets wrong.</p>
+      <ul class="memory-list">${personalData.memories.length ? personalData.memories.map(m => `<li data-memory="${m.id}"><p>${esc(m.text)}</p><div class="memory-meta"><span>${m.source_run ? 'Learned in chat' : 'Added by you'}</span><div><button class="text-button" data-edit-memory="${m.id}">Edit<span class="sr-only"> memory: ${esc(m.text)}</span></button><button class="text-button" data-forget-memory="${m.id}">Forget<span class="sr-only"> memory: ${esc(m.text)}</span></button></div></div></li>`).join('') : '<li class="memory-empty"><p>No memories yet.</p><span>Share a little about yourself in chat, or add something below.</span></li>'}</ul>
+      <form id="add-memory-form"><label for="new-memory">Add something to remember</label><textarea id="new-memory" name="text" rows="2" maxlength="320" placeholder="For example: I prefer quiet places and travel by train." required></textarea><div class="memory-add-footer"><span>Only add details you want shared with your AI models.</span><button class="text-button" type="submit" ${personalData.memories.length >= personalData.limit ? 'disabled' : ''}>Add memory ${ico('plus')}</button></div></form>
+      <p id="memory-error" class="form-error" role="alert"></p>
+      ${personalData.memories.length ? '<button class="text-button forget-all" id="forget-all">Forget all memories</button><div id="forget-confirm" hidden><p>This removes saved memories. Original messages remain in your chat history.</p><button class="text-button" id="cancel-forget">Keep memories</button><button class="text-button forget-all" id="confirm-forget">Forget all</button></div>' : ''}
+      <p class="settings-hint">Forgetting removes a detail from saved memory for future chats. It does not erase the messages where you originally shared it. New messages may be remembered again while learning is on.</p>
+    </section><section class="personal-section"><h2>Models & connections</h2><p class="settings-hint">Choose your research team and comparison model.</p><button class="text-button" data-action="models">Manage models ${ico('arrow-up-right')}</button></section>`;
+  const form = root.querySelector('#personal-form');
+  form.elements.memory_enabled.onchange = () => { form.elements.auto_memory.disabled = !form.elements.memory_enabled.checked; };
+  form.onsubmit = async e => {
+    e.preventDefault(); const button = form.querySelector('button[type="submit"]'); button.disabled = true;
+    try {
+      const data = new FormData(form);
+      personalData = await api('/api/me/settings', { method: 'PUT', body: JSON.stringify({ display_name: data.get('display_name'), instructions: data.get('instructions'), timezone: data.get('timezone'), memory_enabled: form.elements.memory_enabled.checked, auto_memory: form.elements.auto_memory.checked }) });
+      root.querySelector('#personal-error').textContent = ''; notify('Personal preferences saved.');
+    } catch (error) { root.querySelector('#personal-error').textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  const mutateMemory = async (path, options, button) => {
+    const rowId = button.closest('[data-memory]')?.dataset.memory;
+    const index = personalData.memories.findIndex(m => m.id === rowId);
+    const nextId = button.dataset.forgetMemory ? (personalData.memories[index + 1] || personalData.memories[index - 1])?.id : rowId;
+    const focusSelector = nextId ? `[data-edit-memory="${nextId}"]` : '#new-memory';
+    button.disabled = true;
+    try { personalData = await api(path, options); refreshMemoryView(focusSelector); notify('Memory updated.'); }
+    catch (error) { root.querySelector('#memory-error').textContent = error.message; button.disabled = false; }
+  };
+  root.querySelector('#add-memory-form').onsubmit = e => { e.preventDefault(); mutateMemory('/api/me/memories', { method: 'POST', body: JSON.stringify({ text: new FormData(e.target).get('text') }) }, e.target.querySelector('button')); };
+  root.querySelectorAll('[data-edit-memory]').forEach(button => { button.onclick = () => {
+    const m = personalData.memories.find(m => m.id === button.dataset.editMemory);
+    const row = button.closest('li');
+    row.innerHTML = `<form class="edit-memory-form"><label for="edit-${m.id}">Edit memory</label><textarea id="edit-${m.id}" name="text" rows="3" maxlength="320" required>${esc(m.text)}</textarea><div><button class="text-button" type="button" data-cancel-edit>Cancel</button><button class="text-button" type="submit">Save memory ${ico('check')}</button></div></form>`;
+    row.querySelector('[data-cancel-edit]').onclick = () => refreshMemoryView(`[data-edit-memory="${m.id}"]`);
+    row.querySelector('form').onsubmit = e => { e.preventDefault(); mutateMemory(`/api/me/memories/${m.id}`, { method: 'PATCH', body: JSON.stringify({ text: new FormData(e.target).get('text') }) }, e.target.querySelector('button[type="submit"]')); };
+    row.querySelector('textarea').focus(); decorate();
+  }; });
+  root.querySelectorAll('[data-forget-memory]').forEach(button => { button.onclick = () => mutateMemory(`/api/me/memories/${button.dataset.forgetMemory}`, { method: 'DELETE' }, button); });
+  const forgetAll = root.querySelector('#forget-all');
+  if (forgetAll) {
+    forgetAll.onclick = () => { root.querySelector('#forget-confirm').hidden = false; forgetAll.hidden = true; root.querySelector('#cancel-forget').focus(); };
+    root.querySelector('#cancel-forget').onclick = () => { root.querySelector('#forget-confirm').hidden = true; forgetAll.hidden = false; forgetAll.focus(); };
+    root.querySelector('#confirm-forget').onclick = e => mutateMemory('/api/me/memories', { method: 'DELETE' }, e.target);
+  }
   decorate();
 }
 async function openUsers() {
@@ -392,7 +484,7 @@ async function init() {
     authState = await api('/api/auth/me');
     if (authState.required && !authState.user) { renderSignIn(); return; }
     loadAccountPrefs();
-    [config, sessions] = await Promise.all([api('/api/config'), api('/api/sessions')]);
+    [config, sessions, personalData] = await Promise.all([api('/api/config'), api('/api/sessions'), api('/api/me/settings')]);
     if (selected.length < 2 || selected.length > 4) selected = config.models.slice(0, 3).map(m => m.id);
     if (modelSlots.length !== 4) modelSlots = config.models.map(m => selected.find(s => s.split('/')[0] === m.id.split('/')[0]) || m.id);
     judge ||= config.judge;

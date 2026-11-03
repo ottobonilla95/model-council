@@ -1,4 +1,5 @@
 import json
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -163,6 +164,7 @@ async def test_chat_persists_reloads_and_restores_followup_context(tmp_path, mon
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("VERCEL", raising=False)
     storage.init()
+    monkeypatch.setattr("parallax.memory.extract", AsyncMock(return_value=[]))
     model = ConversationModel(AIMessage(content="Hello Otto, I’ll remember that."))
     monkeypatch.setattr("parallax.engine.respond", lambda *args: fake_reply(*args))
 

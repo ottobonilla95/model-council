@@ -79,8 +79,10 @@ def init():
             query(db, "ALTER TABLE sessions ADD COLUMN owner_id TEXT")
         query(db, "CREATE INDEX IF NOT EXISTS sessions_owner ON sessions(owner_id,created)")
         from .accounts import init_tables
+        from .memory import init_tables as init_memory
 
         init_tables(db)
+        init_memory(db)
         if postgres:
             for name, kind in (("job_token", "TEXT"), ("lease_until", "DOUBLE PRECISION")):
                 query(db, f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {name} {kind}")

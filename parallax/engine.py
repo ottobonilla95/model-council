@@ -16,7 +16,7 @@ from langchain_core.messages import ToolMessage
 from langchain_openrouter import ChatOpenRouter
 from langgraph.graph import END, START, StateGraph
 
-from . import storage
+from . import memory, storage
 from .conversation import respond
 from .schemas import Comparison, RunRequest
 from .web import OpenRouterWeb, ResearchWeb
@@ -355,7 +355,10 @@ async def execute_run(request, run_id, credentials, histories, token=None):
     async def emit(payload):
         storage.event(run_id, payload, token=token)
 
-    engine = ParallaxEngine(request, run_id, emit, credentials, histories)
+    snapshot = await asyncio.to_thread(memory.for_run, run_id) if not request.demo else None
+    personalized = memory.personalize(request, snapshot)
+    engine = ParallaxEngine(personalized, run_id, emit, credentials, histories)
+    memory_task = None
     if request.session_id and not request.fresh:
         engine.conversation_history = await asyncio.to_thread(storage.conversation_history, request.session_id, run_id)
     if token:
@@ -366,7 +369,22 @@ async def execute_run(request, run_id, credentials, histories, token=None):
             elif item["payload"]["type"] == "chat_done":
                 engine.saved_reply = {k: v for k, v in item["payload"].items() if k != "type"}
     try:
+        if snapshot and snapshot["settings"]["memory_enabled"] and snapshot["settings"]["auto_memory"]:
+            memory_task = asyncio.create_task(
+                memory.extract(request.question, snapshot, engine.factory, request.chat_model, credentials["openrouter"])
+            )
         result = await engine.run()
+        if memory_task:
+            try:
+                changes = await memory_task
+                count = await asyncio.to_thread(memory.commit, run_id, snapshot, changes, token)
+                if count:
+                    await emit({"type": "memory_saved", "count": count})
+            except (storage.LeaseLostError, asyncio.CancelledError):
+                raise
+            except Exception:
+                # Memory enrichment must never turn a successful chat into a failed run.
+                await emit({"type": "memory_unavailable"})
         storage.finish(run_id, "completed", result, token=token, terminal={"type": "done"})
     except asyncio.CancelledError:
         if token:
@@ -387,3 +405,7 @@ async def execute_run(request, run_id, credentials, histories, token=None):
             {"reports": engine.reports},
             terminal={"type": "error", "message": f"The round stopped: {safe_error(error, credentials)}"},
         )
+    finally:
+        if memory_task:
+            memory_task.cancel()
+            await asyncio.gather(memory_task, return_exceptions=True)
