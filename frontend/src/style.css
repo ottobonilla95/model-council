@@ -343,3 +343,70 @@ summary::-webkit-details-marker { display: none; }
 }
 @media(max-height: 600px) { .empty .chat-surface { justify-content: flex-start; padding-top: 28px; padding-bottom: 16px; } }
 @media(prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Accounts inherit the chat canvas and typography. */
+.signin-page { min-height: 100svh; display: flex; flex-direction: column; }
+.signin-header { display: flex; align-items: center; justify-content: space-between; padding: 26px 36px; }
+.signin-content { width: min(100% - 48px, 440px); margin: auto; padding: 56px 0 80px; text-align: center; }
+.signin-mark .brand-mark { width: 52px; height: 52px; color: var(--accent); margin-bottom: 28px; }
+.signin-content h1 { font-size: clamp(28px, 4vw, 36px); font-weight: 550; letter-spacing: -.035em; line-height: 1.2; text-wrap: balance; margin: 0 0 18px; }
+.signin-content > p { color: var(--body); font-size: 16px; line-height: 1.7; margin: 0 0 32px; }
+.signin-content > small { display: block; color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 20px; }
+.google-signin { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 48px; padding: 12px 24px; background: var(--ink); color: var(--canvas); font-size: 15px; font-weight: 650; border-radius: 8px; text-decoration: none; }
+.google-signin:hover { opacity: .9; }
+.google-signin svg { width: 20px; height: 20px; flex: none; }
+.signin-content .signin-error { color: var(--danger); font-size: 14px; margin: 24px 0; }
+.signin-footer { padding: 24px; color: var(--muted); text-align: center; font-size: 12px; line-height: 1.8; }
+.signin-footer a { color: var(--body); margin-left: 8px; text-underline-offset: 3px; }
+.account-menu { position: relative; }
+.account-menu > summary { cursor: pointer; list-style: none; display: flex; padding: 4px; }
+.account-menu > summary::-webkit-details-marker { display: none; }
+.account-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--raised); color: var(--ink); font-size: 13px; font-weight: 650; }
+.account-panel { position: absolute; z-index: 15; right: 0; top: calc(100% + 10px); width: max-content; max-width: min(320px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.account-panel > strong, .account-panel > span { display: block; overflow-wrap: anywhere; }
+.account-panel > strong { font-size: 14px; font-weight: 650; }
+.account-panel > span { color: var(--muted); font-size: 12px; margin: 5px 0 16px; }
+.account-panel > button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 28px; text-align: left; font-size: 13px; padding: 10px 0; }
+.account-panel > button svg { width: 15px; height: 15px; }
+.account-panel > button:hover { color: var(--accent); }
+.user-management { width: min(100% - 64px, 880px); margin: 28px auto 0; padding-bottom: 64px; overflow-y: auto; scrollbar-gutter: stable; }
+.back-to-chat { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 32px; }
+.back-to-chat svg { width: 16px; height: 16px; }
+.users-heading h1 { font-size: 32px; font-weight: 550; letter-spacing: -.03em; margin: 0 0 12px; }
+.users-heading p { color: var(--body); max-width: 60ch; font-size: 15px; line-height: 1.7; margin: 0; }
+.create-user { margin-top: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.user-management h2 { font-size: 16px; font-weight: 650; margin: 0 0 18px; }
+.create-user form { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; }
+.create-user label { flex: 1 1 180px; display: flex; flex-direction: column; gap: 9px; font-size: 13px; }
+.create-user label span { color: var(--muted); }
+.create-user input, .user-access select { min-height: 44px; border: 1px solid var(--border); border-radius: 8px; background: var(--field); color: var(--ink); padding: 10px 12px; font-size: 16px; }
+.create-user input::placeholder { color: var(--muted); }
+.create-user .primary-button { min-height: 44px; }
+.users-section { margin-top: 30px; }
+.users-section .section-title h2 { margin: 0; }
+.user-list { margin: 18px 0 0; list-style: none; padding: 0; }
+.user-row { display: flex; align-items: center; gap: 24px; justify-content: space-between; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.user-identity { min-width: 0; }
+.user-identity strong, .user-identity span, .user-identity small { display: block; overflow-wrap: anywhere; }
+.user-identity strong { font-size: 14px; font-weight: 650; }
+.user-identity span { color: var(--body); font-size: 13px; margin-top: 5px; }
+.user-identity small { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.user-access { display: flex; flex: none; align-items: center; gap: 16px; }
+.user-access select { font-size: 14px; max-width: 165px; }
+.active-toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+.active-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.user-owner { font-size: 13px; color: var(--muted); }
+.user-management .form-error:empty { display: none; }
+@media (max-width: 680px) {
+  .signin-header { padding: 20px; }
+  .signin-content { padding-top: 40px; }
+  .signin-content > p { font-size: 15px; }
+  .desktop-break { display: none; }
+  .user-management { width: calc(100% - 40px); margin-top: 12px; }
+  .users-heading h1 { font-size: 28px; }
+  .create-user form { flex-direction: column; align-items: stretch; }
+  .create-user label { flex: auto; }
+  .user-row { align-items: start; flex-direction: column; gap: 18px; }
+  .user-access { width: 100%; justify-content: space-between; gap: 10px; }
+  .user-access select { font-size: 16px; }
+}

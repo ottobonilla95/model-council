@@ -74,7 +74,7 @@ The repository deploys as one FastAPI project, with the Vite assets built during
 
 1. Import `ottobonilla95/parallax` into the personal Vercel workspace, using the repository root and the FastAPI framework.
 2. Connect a separate Neon Postgres database. Use separate database branches for Production and Preview so preview testing cannot change production conversations. The integration supplies `DATABASE_URL`.
-3. Set **Vercel Authentication → All Deployments**, including production, before using the hosted app. This is a private, single-owner research workspace with shared history and provider keys, not a multi-user service. Do not disable protection or expose the backend separately.
+3. Configure Google sign-in and an explicit owner email as described below. Keep Vercel Authentication on all deployments while setting up and verifying application auth. Only after verification, and with the owner’s approval, restrict Vercel Authentication to previews so production visitors can reach Google sign-in.
 4. Configure `OPENROUTER_API_KEY` (and optionally `TAVILY_API_KEY`) in the project's environment variables. Hosted Settings shows connection status but cannot write credentials to a local file. Secrets are never sent in queue messages.
 5. Deploy and verify a greeting, automatic research, event reconnection, saved history and cancellation. Only OpenRouter is required for live chat and research. The frontend never substitutes Demo answers for user messages.
 
@@ -99,6 +99,7 @@ Tests exercise the real Deep Agents loop with scripted models, parallel workflow
 
 ## Project files
 
+- `parallax/auth.py` and `parallax/accounts.py`: Google OIDC, revocable login sessions, account roles and administration.
 - `parallax/conversation.py`: conversational reply and typed research routing.
 - `parallax/engine.py`: Deep Agents researchers and the fixed LangGraph workflow.
 - `parallax/web.py`: bounded search, public source reading and source ledgers.
@@ -110,3 +111,25 @@ Tests exercise the real Deep Agents loop with scripted models, parallel workflow
 - `data/`: private runtime data, excluded from Git. Set `PARALLAX_DATA_DIR` to change its location.
 
 The original [project brief](PROJECT-BRIEF.md), [harness investigation](HARNESS-DECISION.md) and [Grok integration research](GROK-INTEGRATION.md) are retained. Architecture research was completed on 2 November 2026; the working application was built on 3 November 2026.
+
+
+## Accounts and Google sign-in
+
+Hosted deployments require sign-in and fail closed if authentication is not configured. Google OIDC uses Authlib with state, nonce, PKCE and ID-token validation. App sessions use random HttpOnly, SameSite=Lax cookies (Secure on HTTPS); only token hashes are stored in Postgres. Mutations require a session-bound CSRF token. Logging out revokes the current session, and changing a user’s access revokes all their sessions. No Google access or refresh tokens are retained.
+
+Create a dedicated Google Cloud project and a Web application OAuth client. Register the exact redirect URI `https://YOUR-PRODUCTION-DOMAIN/auth/google/callback`. Use only the `openid email profile` scopes. Publish the Google OAuth audience when ready to accept accounts beyond test users. Google may require additional verification depending on branding and scopes.
+
+Set these **Production** environment variables in the Parallax Vercel project, then deploy:
+
+- `GOOGLE_CLIENT_ID`: OAuth web client ID (Config).
+- `GOOGLE_CLIENT_SECRET`: OAuth client secret (Secret).
+- `APP_SESSION_SECRET`: securely generated random value of at least 32 characters (Secret).
+- `APP_BASE_URL`: exact canonical HTTPS production origin, without a trailing slash (Config).
+- `PARALLAX_OWNER_EMAIL`: owner’s Google email (Config); this account gets the admin role.
+- `PARALLAX_ALLOW_SIGNUP=1`: create a normal user on first verified Google sign-in. Set `0` to allow only users created by an administrator.
+
+Previews must use separate OAuth credentials/origins and an isolated database; do not copy production secrets or data into them. The canonical production origin is used for OAuth redirects, so use that domain when signing in. Local auth is optional: without Google configuration, the loopback-only app retains its local workspace. Set `PARALLAX_REQUIRE_AUTH=1` to require sign-in locally as well. For a local Google test, add the exact localhost callback URI to a separate test client and set the corresponding env vars.
+
+The owner can choose **Your account → Manage users**, create accounts by Gmail/Google Workspace email, change user/admin roles, and disable accounts. A pre-created account links to its verified Google identity on first sign-in. No invitation email is sent. Users can only list, read, stream, export, append to, or stop their own conversations; administrators do not get a chat-reading endpoint for other users. The explicitly configured owner receives existing unowned hosted conversations on first sign-in. The first person to register does not become the owner.
+
+Provider credentials remain server-managed and shared for this instance. Signed-in users consume the operator’s API credits. The existing global two-run concurrency limit remains in place; this version does not implement billing or individual spend quotas. The `/privacy` page describes account, conversation and provider processing.

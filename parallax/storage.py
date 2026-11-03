@@ -20,6 +20,10 @@ class LeaseLostError(RuntimeError):
     pass
 
 
+class OwnershipError(ValueError):
+    pass
+
+
 def now():
     return datetime.now(UTC).isoformat()
 
@@ -70,6 +74,14 @@ def init():
         for sql in statements:
             query(db, sql)
         if postgres:
+            query(db, "ALTER TABLE sessions ADD COLUMN IF NOT EXISTS owner_id TEXT")
+        elif "owner_id" not in {r["name"] for r in query(db, "PRAGMA table_info(sessions)")}:
+            query(db, "ALTER TABLE sessions ADD COLUMN owner_id TEXT")
+        query(db, "CREATE INDEX IF NOT EXISTS sessions_owner ON sessions(owner_id,created)")
+        from .accounts import init_tables
+
+        init_tables(db)
+        if postgres:
             for name, kind in (("job_token", "TEXT"), ("lease_until", "DOUBLE PRECISION")):
                 query(db, f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {name} {kind}")
         else:
@@ -97,7 +109,7 @@ def init():
                 )
 
 
-def create_run(request):
+def create_run(request, owner_id=None):
     session = request.session_id or uuid.uuid4().hex
     run_id = uuid.uuid4().hex
     with connection() as db:
@@ -105,11 +117,18 @@ def create_run(request):
             query(db, "SELECT pg_advisory_xact_lock(721093413)")
         else:
             query(db, "BEGIN IMMEDIATE")
+        existing = query(db, "SELECT owner_id FROM sessions WHERE id=?", (session,)).fetchone()
+        if existing and existing["owner_id"] != owner_id:
+            raise OwnershipError("Conversation not found.")
         if query(db, "SELECT COUNT(*) AS n FROM runs WHERE status='running'").fetchone()["n"] >= 2:
             raise CapacityError("Two rounds are already running. Stop one or wait for it to finish.")
         if query(db, "SELECT id FROM runs WHERE session_id=? AND status='running'", (session,)).fetchone():
             raise SessionBusyError("Wait for this conversation's current round to finish.")
-        query(db, "INSERT INTO sessions VALUES(?,?,?) ON CONFLICT(id) DO NOTHING", (session, request.question[:90], now()))
+        query(
+            db,
+            "INSERT INTO sessions(id,title,created,owner_id) VALUES(?,?,?,?) ON CONFLICT(id) DO NOTHING",
+            (session, request.question[:90], now(), owner_id),
+        )
         query(
             db,
             "INSERT INTO runs(id,session_id,created,status,request) VALUES(?,?,?,?,?)",
@@ -229,14 +248,23 @@ def events(run_id, after=0):
         return [unpack(row) for row in query(db, "SELECT * FROM events WHERE run_id=? AND id>? ORDER BY id", (run_id, after))]
 
 
-def sessions():
+def owns_session(session_id, owner_id):
+    with connection() as db:
+        row = query(db, "SELECT owner_id FROM sessions WHERE id=?", (session_id,)).fetchone()
+        return bool(row and row["owner_id"] == owner_id)
+
+
+def sessions(owner_id=None):
     with connection() as db:
         return [
             dict(row)
             for row in query(
                 db,
                 "SELECT s.id,s.title,s.created,MAX(r.created) AS updated,COUNT(r.id) AS rounds "
-                "FROM sessions s JOIN runs r ON s.id=r.session_id GROUP BY s.id,s.title,s.created ORDER BY updated DESC",
+                "FROM sessions s JOIN runs r ON s.id=r.session_id "
+                + ("WHERE s.owner_id IS NULL " if owner_id is None else "WHERE s.owner_id=? ")
+                + "GROUP BY s.id,s.title,s.created ORDER BY updated DESC",
+                () if owner_id is None else (owner_id,),
             )
         ]
 

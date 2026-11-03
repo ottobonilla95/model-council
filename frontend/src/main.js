@@ -10,6 +10,10 @@ const md = s => DOMPurify.sanitize(marked.parse(s || ''), { USE_PROFILES: { html
 const brandMark = `<svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m5 9 14-4v18L5 27V9Z"/><path d="m13 5 14 4v18l-14-4V5Z"/></svg>`;
 const app = document.querySelector('#app');
 let config;
+let authState;
+let page = 'chat';
+let usersData = null;
+let prefsKey = 'parallax-preferences';
 let sessions = [];
 let sessionId = null;
 let rounds = [];
@@ -37,14 +41,15 @@ function notify(message) {
   notify.timer = setTimeout(() => toast.classList.remove('show'), 4500);
 }
 async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
+  const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...(authState?.csrf_token ? { 'X-CSRF-Token': authState.csrf_token } : {}), ...options.headers } });
   const data = await response.json();
+  if (response.status === 401 && authState?.user) { stream?.close(); authState.user = null; sessions = []; rounds = []; current = null; sessionId = null; draft = ''; context = ''; document.querySelectorAll('dialog').forEach(d => d.close()); renderSignIn('Your session ended. Sign in to continue.'); }
   if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : data.detail?.[0]?.msg || 'The request could not be completed.');
   return data;
 }
 const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) });
 function savePrefs() {
-  localStorage.setItem('parallax-preferences', JSON.stringify({ models: selected, slots: modelSlots, judge, depth, context, mode, chatModel }));
+  localStorage.setItem(prefsKey, JSON.stringify({ models: selected, slots: modelSlots, judge, depth, context, mode, chatModel }));
 }
 function identity(id) {
   const provider = id.split('/')[0];
@@ -96,18 +101,18 @@ function shell() {
       <div class="history-heading">Your conversations</div>
       <nav class="history" aria-label="Saved conversations">${sessions.length ? sessions.map(s => `<button class="history-item ${s.id === sessionId ? 'selected' : ''}" data-session="${s.id}" title="${esc(s.title)}">${ico('message-square')}<span>${esc(s.title)}</span></button>`).join('') : `<p class="history-empty">A place for your questions.<br>Your conversations appear here.</p>`}</nav>
       <div class="sidebar-bottom">
-        <div class="local-note"><span class="local-dot"></span><div>${config.managed_credentials ? 'Saved in your private workspace' : 'Saved on your computer'}<small>Questions, answers, and sources</small></div></div>
+        <div class="local-note"><span class="local-dot"></span><div>${authState?.required ? 'Private to your account' : 'Saved on your computer'}<small>Questions, answers, and sources</small></div></div>
         <button class="settings-nav" data-action="settings">${ico('settings-2')} Settings <span class="connection-count">${config.keys.openrouter ? 'Connected' : 'Add key'}</span></button>
       </div>
     </aside>
     <main class="main ${current ? 'has-results' : 'empty'}">
-      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="brand">${brandMark}<span class="app-name">Parallax</span></span><button class="icon-button header-new" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right">${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
-      <div class="chat-surface"><div id="desk"></div>
-      <div class="composer-area"><div id="composer"></div><p class="composer-footnote">Parallax can make mistakes. Check important sources.</p></div></div>
+      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="brand">${brandMark}<span class="app-name">Parallax</span></span><button class="icon-button header-new" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right">${accountMenu()}${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
+      ${page === 'users' ? '<div id="user-management" class="user-management"></div>' : `<div class="chat-surface"><div id="desk"></div>
+      <div class="composer-area"><div id="composer"></div><p class="composer-footnote">Parallax can make mistakes. Check important sources.</p></div></div>`}
     </main>
   </div>`;
-  renderDesk();
-  renderComposer();
+  if (page === 'users') renderUsers();
+  else { renderDesk(); renderComposer(); }
   decorate();
   syncNavigation();
 }
@@ -233,6 +238,7 @@ async function loadSession(id) {
     const saved = await api(`/api/sessions/${id}`);
     if (!saved.length) return;
     stream?.close();
+    page = 'chat';
     sessionId = id;
     rounds = saved;
     const last = saved.at(-1);
@@ -244,6 +250,8 @@ async function loadSession(id) {
   } catch (error) { notify(error.message); }
 }
 function newConversation() {
+  if (authState?.required && !authState.user) return;
+  page = 'chat';
   stream?.close();
   current = null;
   sessionId = null;
@@ -296,12 +304,18 @@ function openContext() {
   dialog.querySelector('form').onsubmit = e => { e.preventDefault(); context = new FormData(e.target).get('context').trim(); savePrefs(); dialog.close(); renderComposer(); };
 }
 document.addEventListener('click', async e => {
+  if (!e.target.closest('.account-menu')) document.querySelector('.account-menu')?.removeAttribute('open');
   if (!e.target.closest('.research-options')) document.querySelector('.research-options')?.removeAttribute('open');
   const session = e.target.closest('[data-session]');
   if (session) return loadSession(session.dataset.session);
+  const accessButton = e.target.closest('[data-save-user]');
+  if (accessButton) { await saveUserAccess(accessButton); return; }
   const action = e.target.closest('[data-action]')?.dataset.action;
   switch (action) {
     case 'new': newConversation(); break;
+    case 'users': await openUsers(); break;
+    case 'back-chat': page = 'chat'; shell(); break;
+    case 'signout': try { await post('/api/auth/logout', {}); location.replace('/'); } catch (err) { notify(err.message); } break;
     case 'toggle-nav': mobileNav = !mobileNav; document.querySelector('.workspace').classList.toggle('nav-open', mobileNav); syncNavigation(); document.querySelector(mobileNav ? '.drawer-heading button' : '.history-toggle')?.focus(); break;
     case 'theme': toggleTheme(); break;
     case 'settings': openSettings(); break;
@@ -319,13 +333,65 @@ document.addEventListener('change', e => { if (e.target.id === 'depth') depth = 
 window.addEventListener('resize', syncNavigation);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelector('.research-options')?.removeAttribute('open');
-  if (e.key === 'Escape' && mobileNav && !document.querySelector('dialog[open]')) { mobileNav = false; document.querySelector('.workspace').classList.remove('nav-open'); syncNavigation(); document.querySelector('.history-toggle')?.focus(); }
+  if (e.key === 'Escape' && mobileNav && !document.querySelector('dialog[open]')) { mobileNav = false; document.querySelector('.workspace')?.classList.remove('nav-open'); syncNavigation(); document.querySelector('.history-toggle')?.focus(); }
   if (e.target.id === 'question' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(e.target.value); }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && !document.querySelector('dialog[open]')) { e.preventDefault(); newConversation(); }
 
 });
+
+function loadAccountPrefs() {
+  prefsKey = authState.required ? `parallax-preferences:${authState.user.id}` : 'parallax-preferences';
+  try { prefs = JSON.parse(localStorage.getItem(prefsKey) || '{}'); } catch { prefs = {}; }
+  selected = prefs.models || []; modelSlots = prefs.slots || []; judge = prefs.judge || '';
+  mode = prefs.mode || 'auto'; chatModel = prefs.chatModel || ''; depth = prefs.depth || 'standard'; context = prefs.context || '';
+}
+function accountMenu() {
+  if (!authState?.user) return '';
+  const user = authState.user;
+  return `<details class="account-menu"><summary aria-label="Your account" title="Your account"><span class="account-avatar">${esc(user.name.slice(0,1).toUpperCase())}</span></summary><div class="account-panel"><strong>${esc(user.name)}</strong><span>${esc(user.email)}</span>${user.role === 'admin' ? `<button data-action="users">Manage users ${ico('arrow-up-right')}</button>` : ''}${authState.required ? `<button data-action="signout">Sign out ${ico('arrow-up-right')}</button>` : ''}</div></details>`;
+}
+function renderSignIn(message = '') {
+  const errors = { configuration: 'Google sign-in is being configured. Please try again shortly.', signin: 'Google sign-in did not finish. Please try again.', verification: 'Use a Gmail or Google Workspace account with a verified email address.', disabled: 'Your account is disabled. Contact your Parallax administrator.', invite: 'Ask the Parallax administrator to create your account first.' };
+  const code = new URLSearchParams(location.search).get('auth_error');
+  message ||= errors[code] || '';
+  app.innerHTML = `<main class="signin-page"><header class="signin-header"><span class="brand">${brandMark}<span>Parallax</span></span>${themeButton()}</header><section class="signin-content"><div class="signin-mark">${brandMark}</div><h1>A space for your curiosity.</h1><p>Sign in to keep your conversations together,<br class="desktop-break"> wherever you pick them up.</p>${message ? `<p class="signin-error" role="alert">${esc(message)}</p>` : ''}${authState.configured ? `<a class="google-signin" href="/auth/google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.9-1.74 2.98-4.31 2.98-7.36Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.41l-3.24-2.51c-.9.6-2.04.97-3.38.97-2.6 0-4.81-1.76-5.6-4.12H3.06v2.59A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93a6 6 0 0 1 0-3.86V7.48H3.06a10 10 0 0 0 0 9.04l3.34-2.59Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.51 3.83 1.51l2.87-2.87A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.94 5.48l3.34 2.59c.79-2.36 3-4.12 5.6-4.12Z"/></svg>Continue with Google</a>` : `<p class="signin-error">Sign-in setup is in progress. Please check back shortly.</p><button class="text-button" data-action="reload">Refresh</button>`}<small>${authState.allow_signup ? 'New here? Your account is created when you sign in.' : 'Use the Google email your administrator added.'}</small></section><footer class="signin-footer">Your conversations are private to your account. <a href="/privacy">Privacy</a></footer></main>`;
+  decorate();
+}
+async function openUsers() {
+  if (authState?.user?.role !== 'admin') return;
+  page = 'users'; mobileNav = false; usersData = null; shell();
+  try { usersData = await api('/api/admin/users'); if (page === 'users') renderUsers(); }
+  catch (error) { if (page === 'users' && document.querySelector('#user-management')) document.querySelector('#user-management').innerHTML = `<p role="alert">${esc(error.message)}</p><button class="text-button" data-action="users">Try again</button>`; }
+}
+function renderUsers() {
+  const root = document.querySelector('#user-management');
+  if (!root) return;
+  root.innerHTML = `<button class="text-button back-to-chat" data-action="back-chat">${ico('arrow-left')} Back to chat</button><div class="users-heading"><h1>Users</h1><p>Manage who can use Parallax. Everyone has their own private conversations.</p></div><section class="create-user"><h2>Create a user</h2><form id="create-user-form"><label>Google email<input type="email" name="email" autocomplete="off" placeholder="name@gmail.com" maxlength="254" required></label><label>Name <span>(optional)</span><input name="name" autocomplete="off" maxlength="120" placeholder="Their name"></label><button class="primary-button" type="submit">Create user ${ico('plus')}</button></form><p class="settings-hint">They can sign in with their Gmail or Google Workspace account.</p><p class="form-error" id="create-user-error" role="alert"></p></section><section class="users-section"><div class="section-title"><h2>All users</h2>${usersData ? `<span>${usersData.users.length} ${usersData.users.length === 1 ? 'account' : 'accounts'}</span>` : ''}</div>${!usersData ? '<p role="status">Loading users…</p>' : !usersData.users.length ? '<p>No accounts yet. Create a user above.</p>' : `<ul class="user-list">${usersData.users.map(u => {
+    const locked = u.id === authState.user.id || u.email === usersData.owner_email;
+    return `<li class="user-row" data-user-row="${u.id}"><div class="user-identity"><strong>${esc(u.name)}</strong><span>${esc(u.email)}</span><small>${!u.active ? 'Disabled' : u.last_login ? 'Signed in' : 'Not signed in yet'}${u.id === authState.user.id ? ' · You' : ''}</small></div>${locked ? `<span class="user-owner">${u.email === usersData.owner_email ? 'Owner' : 'Administrator'}</span>` : `<div class="user-access"><label class="sr-only" for="role-${u.id}">Role for ${esc(u.email)}</label><select id="role-${u.id}" name="role"><option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Administrator</option></select><label class="active-toggle"><input type="checkbox" name="active" ${u.active ? 'checked' : ''}> Active</label><button class="text-button" data-save-user="${u.id}">Save<span class="sr-only"> access for ${esc(u.email)}</span></button></div>`}</li>`;
+  }).join('')}</ul>`}<p id="user-access-error" class="form-error" role="alert"></p></section>`;
+  root.querySelector('#create-user-form').onsubmit = async e => {
+    e.preventDefault();
+    const button = e.target.querySelector('button'); button.disabled = true;
+    const data = new FormData(e.target);
+    try { await post('/api/admin/users', { email: data.get('email').trim(), name: data.get('name').trim() }); usersData = await api('/api/admin/users'); renderUsers(); notify('User created. They can sign in with Google using that email.'); }
+    catch (error) { root.querySelector('#create-user-error').textContent = error.message; button.disabled = false; }
+  };
+  decorate();
+}
+async function saveUserAccess(button) {
+  const row = button.closest('[data-user-row]'); button.disabled = true;
+  try {
+    await api(`/api/admin/users/${button.dataset.saveUser}`, { method: 'PATCH', body: JSON.stringify({ role: row.querySelector('select').value, active: row.querySelector('input[name="active"]').checked }) });
+    usersData = await api('/api/admin/users'); renderUsers(); notify('Access saved. Existing sessions for this user have ended.');
+  } catch (error) { document.querySelector('#user-access-error').textContent = error.message; button.disabled = false; }
+}
+
 async function init() {
   try {
+    authState = await api('/api/auth/me');
+    if (authState.required && !authState.user) { renderSignIn(); return; }
+    loadAccountPrefs();
     [config, sessions] = await Promise.all([api('/api/config'), api('/api/sessions')]);
     if (selected.length < 2 || selected.length > 4) selected = config.models.slice(0, 3).map(m => m.id);
     if (modelSlots.length !== 4) modelSlots = config.models.map(m => selected.find(s => s.split('/')[0] === m.id.split('/')[0]) || m.id);

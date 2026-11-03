@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-from parallax import config, storage
+from parallax import auth, config, storage
 from parallax.app import TASKS, app
 from parallax.jobs import process_run
 from parallax.schemas import RunRequest
@@ -107,6 +107,7 @@ async def test_queue_retry_reuses_completed_researchers(db, monkeypatch):
 
 
 def test_hosted_api_enqueues_and_does_not_spawn_in_memory_task(db, monkeypatch):
+    monkeypatch.setattr(auth, "required", lambda: False)  # Queue behavior is isolated from browser auth here.
     queued = []
 
     async def enqueue(run_id):
@@ -127,6 +128,8 @@ def test_hosted_api_enqueues_and_does_not_spawn_in_memory_task(db, monkeypatch):
 
 
 def test_queue_publish_failure_is_visible_and_not_left_running(db, monkeypatch):
+    monkeypatch.setattr(auth, "required", lambda: False)
+
     async def broken(_):
         raise RuntimeError("private queue failure")
 

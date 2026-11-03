@@ -10,3 +10,5 @@ frontend/node_modules/
 frontend/dist/
 *.pyc
 **/.impeccable/hook.cache.json
+
+.impeccable/review/
