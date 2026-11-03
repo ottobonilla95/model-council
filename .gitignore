@@ -1,5 +1,7 @@
 .venv/
 .env
+.env.*
+.vercel/
 data/
 __pycache__/
 .pytest_cache/

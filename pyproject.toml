@@ -8,9 +8,11 @@ dependencies = [
     "httpx>=0.28.1",
     "langchain-openrouter>=0.2.9",
     "langgraph>=1.2.19",
+    "psycopg[binary]>=3.3.7",
     "python-dotenv>=1.2.4",
     "trafilatura>=2.3.1",
     "uvicorn[standard]>=0.54.0",
+    "vercel-queue>=0.10.1",
 ]
 
 [dependency-groups]
@@ -29,3 +31,9 @@ line-length = 140
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.vercel]
+entrypoint = "parallax.app:app"
+
+[[tool.vercel.subscribers]]
+entrypoint = "parallax.jobs"

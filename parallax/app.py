@@ -28,7 +28,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Parallax", lifespan=lifespan)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts())
 
 
 @app.middleware("http")
@@ -36,12 +36,13 @@ async def local_requests(request: Request, call_next):
     origin = request.headers.get("origin")
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         if origin and urlparse(origin).netloc != request.headers.get("host"):
-            return JSONResponse({"detail": "Open the app directly on localhost to make changes."}, status_code=403)
+            return JSONResponse({"detail": "Open the app directly on its own domain to make changes."}, status_code=403)
         if request.headers.get("sec-fetch-site") == "cross-site":
             return JSONResponse({"detail": "Cross-site requests are not allowed."}, status_code=403)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
@@ -53,6 +54,7 @@ def app_config():
     credentials = config.keys()
     return {
         "keys": {name: bool(value) for name, value in credentials.items()},
+        "managed_credentials": config.hosted(),
         "models": config.DEFAULT_MODELS,
         "judge": config.DEFAULT_MODELS[0]["id"],
         "limits": {
@@ -69,7 +71,10 @@ class Credentials(BaseModel):
 
 @app.post("/api/settings")
 def settings(values: Credentials):
-    config.save_keys(values.model_dump())
+    try:
+        config.save_keys(values.model_dump())
+    except ValueError as error:
+        raise HTTPException(403, str(error)) from None
     return app_config()
 
 
@@ -92,6 +97,7 @@ async def models():
 
 @app.get("/api/sessions")
 def sessions():
+    storage.expire_abandoned()
     return storage.sessions()
 
 
@@ -102,28 +108,41 @@ def session(session_id: str):
 
 @app.post("/api/runs", status_code=201)
 async def start(request: RunRequest):
-    if sum(not t.done() for t in TASKS.values()) >= 2:
-        raise HTTPException(429, "Two rounds are already running. Stop one or wait for it to finish.")
+    storage.expire_abandoned()
     credentials = config.keys()
     if not request.demo and not all(credentials.values()):
-        raise HTTPException(400, "Connect OpenRouter and Tavily in Settings, or turn on Demo.")
-    if request.session_id and any(r["status"] == "running" for r in storage.session_runs(request.session_id)):
-        raise HTTPException(409, "Wait for this conversation's current round to finish.")
+        location = "Vercel environment variables" if config.hosted() else "Settings"
+        raise HTTPException(400, f"Connect OpenRouter and Tavily in {location}, or turn on Demo.")
     histories = (
         {model: storage.research_history(request.session_id, model) for model in request.models}
         if request.session_id and not request.fresh
         else {}
     )
-    run_id, session_id = storage.create_run(request)
+    try:
+        run_id, session_id = storage.create_run(request)
+    except storage.CapacityError as error:
+        raise HTTPException(429, str(error)) from None
+    except storage.SessionBusyError as error:
+        raise HTTPException(409, str(error)) from None
     storage.event(run_id, {"type": "started", "models": request.models, "demo": request.demo})
-    task = asyncio.create_task(execute_run(request, run_id, credentials, histories))
-    TASKS[run_id] = task
-    task.add_done_callback(lambda _: TASKS.pop(run_id, None))
+    if config.hosted():
+        from .jobs import enqueue
+
+        try:
+            await enqueue(run_id)
+        except Exception:
+            storage.finish(run_id, "failed", terminal={"type": "error", "message": "Could not queue this round. Please try again."})
+            raise HTTPException(503, "Could not queue this round. Please try again.") from None
+    else:
+        task = asyncio.create_task(execute_run(request, run_id, credentials, histories))
+        TASKS[run_id] = task
+        task.add_done_callback(lambda _: TASKS.pop(run_id, None))
     return {"run_id": run_id, "session_id": session_id}
 
 
 @app.get("/api/runs/{run_id}")
 def run(run_id: str):
+    storage.expire_abandoned()
     saved = storage.get_run(run_id)
     if not saved:
         raise HTTPException(404, "Round not found.")
@@ -132,12 +151,20 @@ def run(run_id: str):
 
 @app.post("/api/runs/{run_id}/cancel")
 async def cancel(run_id: str):
+    saved = storage.get_run(run_id)
+    if not saved:
+        raise HTTPException(404, "Round not found.")
+    if config.hosted():
+        storage.finish(
+            run_id,
+            "cancelled",
+            {"reports": list(storage.completed_reports(run_id).values())},
+            terminal={"type": "cancelled", "message": "Round stopped. Completed answers have been saved."},
+        )
     task = TASKS.get(run_id)
     if task and not task.done():
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-    elif not storage.get_run(run_id):
-        raise HTTPException(404, "Round not found.")
     return {"ok": True}
 
 
@@ -153,13 +180,13 @@ async def stream(run_id: str, request: Request, after: int = 0):
     async def generate():
         nonlocal cursor
         while not await request.is_disconnected():
-            for event in storage.events(run_id, cursor):
+            for event in await asyncio.to_thread(storage.events, run_id, cursor):
                 cursor = event["id"]
                 yield f"id: {cursor}\ndata: {json.dumps(event['payload'])}\n\n"
-            if storage.get_run(run_id)["status"] != "running":
+            if (await asyncio.to_thread(storage.get_run, run_id))["status"] != "running":
                 break
             yield ": heartbeat\n\n"
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1)
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 

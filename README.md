@@ -2,7 +2,7 @@
 
 [Source repository](https://github.com/ottobonilla95/parallax)
 
-A local research chat that asks 2–4 models to investigate independently, then compares their answers with sources and meaningful disagreements intact.
+A research chat that asks 2–4 models to investigate independently, then compares their answers with sources and meaningful disagreements intact.
 
 Built with **Deep Agents, LangGraph, OpenRouter, FastAPI and a Vite interface**. This uses our own research harness around API models; it does not reproduce the consumer ChatGPT, Claude.ai or Grok applications.
 
@@ -51,7 +51,7 @@ Dark mode is the default. Use the sun/moon button in the header to switch themes
 
 Researchers get identical current questions and shared user context. Follow-ups include recent user questions and only that model's own prior final answers, capped to the last eight history messages and 18,000 characters per prior answer. They never receive sibling findings or the previous combined answer. **Fresh round** omits that history. Demo findings are excluded from live history.
 
-The Deep Agents filesystem backend is new for each researcher and round. Scratch notes and the full internal agent state do not persist between rounds. SQLite preserves original final answers, collected source records, events and run settings. The comparison receives the reports only after all researchers finish or fail.
+The Deep Agents filesystem backend is new for each researcher and round. Scratch notes and the full internal agent state do not persist between rounds. SQLite locally, or Postgres on Vercel, preserves original final answers, collected source records, events and run settings. The comparison receives the reports only after all researchers finish or fail.
 
 ## Limits in this version
 
@@ -66,7 +66,21 @@ The reader supports text/HTML/JSON/XML over public HTTP(S), with a 2 MB response
 
 Citation cleanup checks generated Markdown links and source IDs against the collected source ledgers. It does not prove a cited source supports a claim. The comparison is still an AI interpretation. The system is instructed to preserve useful dissent and uncertainty rather than use majority vote as proof.
 
-Completed answers survive a server restart; in-flight rounds become **interrupted**, not automatically resumed. There is no hosted deployment, login, encryption at rest or automatic cross-device sync. API failures and missing credits remain visible. End-to-end paid provider behavior and answer quality still need live evaluation with your keys.
+Locally, completed answers survive a restart and in-flight rounds become **interrupted**. On Vercel, research runs use a durable queue and Postgres. Worker retries reuse completed researcher reports; an in-flight provider request may be repeated after a crash and can incur additional charges. Full agent scratch state is not checkpointed. API failures and missing credits remain visible. End-to-end paid provider behavior and answer quality still need live evaluation with valid keys.
+
+## Vercel deployment
+
+The repository deploys as one FastAPI project, with the Vite assets built during deployment. No Next.js migration is required. `vercel.json` sets Frankfurt and an 800-second function limit (requires Pro); `pyproject.toml` declares the private Python queue subscriber. Vercel Queues is currently in beta.
+
+1. Import `ottobonilla95/parallax` into the personal Vercel workspace, using the repository root and the FastAPI framework.
+2. Connect a separate Neon Postgres database. Use separate database branches for Production and Preview so preview testing cannot change production conversations. The integration supplies `DATABASE_URL`.
+3. Set **Vercel Authentication → All Deployments**, including production, before using the hosted app. This is a private, single-owner research workspace with shared history and provider keys, not a multi-user service. Do not disable protection or expose the backend separately.
+4. Configure `OPENROUTER_API_KEY` and `TAVILY_API_KEY` in the project's environment variables. Hosted Settings shows connection status but cannot write credentials to a local file. Secrets are never sent in queue messages.
+5. Deploy and verify a Demo round, event reconnection, saved history and cancellation before making paid model calls. Missing provider keys leave Demo usable and live research disabled.
+
+The hosted API uses Postgres for concurrency limits, job leases, cancellation, events and results. New server instances do not interrupt active jobs. A worker keeps a renewable lease and can only write while it still owns the round. Queue delivery retries up to three times; completed runs are idempotent. Research has a 690-second overall worker timeout. Expired abandoned jobs are marked interrupted when the app is next accessed. The queue publishes only saved run IDs and handles work independently from the browser connection.
+
+For custom domains, also add the exact hostname to `PARALLAX_ALLOWED_HOSTS` (comma separated). Vercel-generated domains are accepted automatically. Never put provider secrets in frontend build variables. Local SQLite history is not uploaded automatically.
 
 ## Develop and verify
 
@@ -87,8 +101,9 @@ Tests exercise the real Deep Agents loop with scripted models, parallel workflow
 
 - `parallax/engine.py`: Deep Agents researchers and the fixed LangGraph workflow.
 - `parallax/web.py`: bounded search, public source reading and source ledgers.
-- `parallax/storage.py`: local SQLite conversations, rounds and events.
-- `parallax/app.py`: local API, event streaming and frontend serving.
+- `parallax/storage.py`: SQLite/Postgres conversations, rounds, events and worker leases.
+- `parallax/app.py`: API, event streaming and frontend serving.
+- `parallax/jobs.py`: private Vercel Queue subscriber and retry-safe hosted execution.
 - `frontend/src/`: interface and styles.
 - `tests/`: behavioral checks using the real harness with deterministic model doubles.
 - `data/`: private runtime data, excluded from Git. Set `PARALLAX_DATA_DIR` to change its location.

@@ -161,6 +161,7 @@ class ParallaxEngine:
         self.factory = factory
         self.web_factory = web_factory
         self.reports = []
+        self.saved_reports = {}
 
     def build_agent(self, model, web, prompt, limit, structured=False):
         # A new backend object for every agent. Nothing touches the host filesystem.
@@ -178,6 +179,10 @@ class ParallaxEngine:
 
     async def research(self, index):
         model = self.request.models[index]
+        saved = self.saved_reports.get(model)
+        if saved and saved["status"] == "completed":
+            self.reports.append(saved)
+            return {"reports": [saved]}
         agent_id = f"r{index + 1}"
         started = time.monotonic()
         await self.emit({"type": "researcher_start", "agent": agent_id, "model": model})
@@ -299,18 +304,32 @@ class ParallaxEngine:
         return {"reports": [report]}
 
 
-async def execute_run(request, run_id, credentials, histories):
+async def execute_run(request, run_id, credentials, histories, token=None):
     async def emit(payload):
-        storage.event(run_id, payload)
+        storage.event(run_id, payload, token=token)
 
     engine = ParallaxEngine(request, run_id, emit, credentials, histories)
+    if token:
+        engine.saved_reports = storage.completed_reports(run_id)
     try:
         result = await engine.run()
-        storage.finish(run_id, "completed", result)
-        storage.event(run_id, {"type": "done"})
+        storage.finish(run_id, "completed", result, token=token, terminal={"type": "done"})
     except asyncio.CancelledError:
-        storage.finish(run_id, "cancelled", {"reports": engine.reports})
-        storage.event(run_id, {"type": "cancelled", "message": "Round stopped. Completed answers have been saved."})
+        if token:
+            # Infrastructure cancellation must be retried by the queue, not reported as a user cancellation.
+            raise
+        storage.finish(
+            run_id,
+            "cancelled",
+            {"reports": engine.reports},
+            terminal={"type": "cancelled", "message": "Round stopped. Completed answers have been saved."},
+        )
     except Exception as error:
-        storage.finish(run_id, "failed", {"reports": engine.reports})
-        storage.event(run_id, {"type": "error", "message": f"The round stopped: {safe_error(error, credentials)}"})
+        if token:
+            raise
+        storage.finish(
+            run_id,
+            "failed",
+            {"reports": engine.reports},
+            terminal={"type": "error", "message": f"The round stopped: {safe_error(error, credentials)}"},
+        )
