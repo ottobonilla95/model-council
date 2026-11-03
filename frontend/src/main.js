@@ -7,6 +7,7 @@ const iconSet = { Sun, Moon, Plus, Settings2, ArrowUp, ArrowLeft, PanelLeftClose
 const ico = (name, cls = '') => `<i data-lucide="${name}" class="${cls}"></i>`;
 const esc = (s = '') => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const md = s => DOMPurify.sanitize(marked.parse(s || ''), { USE_PROFILES: { html: true }, FORBID_TAGS: ['img', 'iframe', 'style', 'input', 'form'], FORBID_ATTR: ['style'] });
+const brandMark = `<svg class="brand-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m5 9 14-4v18L5 27V9Z"/><path d="m13 5 14 4v18l-14-4V5Z"/></svg>`;
 const app = document.querySelector('#app');
 let config;
 let sessions = [];
@@ -104,7 +105,7 @@ function shell() {
       </div>
     </aside>
     <main class="main ${current ? 'has-results' : 'empty'}">
-      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="app-name">Parallax</span><button class="icon-button" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right"><button class="demo-switch ${demo ? 'on' : ''}" data-action="demo" aria-pressed="${demo}">${demo ? ico('flask-conical') : '<span class="live-dot"></span>'}<span>${demo ? 'Demo mode' : 'Live research'}</span>${ico('chevron-down')}</button>${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
+      <header class="topbar"><div class="topbar-left"><button class="icon-button history-toggle" data-action="toggle-nav" aria-label="Open conversations" aria-expanded="${mobileNav}">${ico('panel-left-open')}</button><span class="brand">${brandMark}<span class="app-name">Parallax</span></span><button class="icon-button header-new" data-action="new" aria-label="New conversation" title="New conversation">${ico('plus')}</button></div><div class="topbar-right"><button class="demo-switch ${demo ? 'on' : ''}" data-action="demo" aria-pressed="${demo}" title="${demo ? 'Switch to live research' : 'Switch to demo mode'}">${demo ? ico('flask-conical') : '<span class="live-dot"></span>'}<span>${demo ? 'Demo mode' : 'Live research'}</span></button>${themeButton()}<button class="icon-button" data-action="settings" aria-label="Settings" title="Settings">${ico('settings-2')}</button><button class="icon-button help-button" data-action="help" aria-label="How Parallax works">${ico('circle-help')}</button></div></header>
       <div class="chat-surface"><div id="desk"></div>
       <div class="composer-area"><div id="composer"></div><p class="composer-footnote">${demo ? 'Demo uses sample answers. No model calls or web searches.' : 'Your question goes to OpenRouter; searches go to Tavily. AI can make mistakes.'}</p></div></div>
     </main>
@@ -124,22 +125,23 @@ function syncNavigation() {
 function renderComposer() {
   const container = document.querySelector('#composer');
   const models = [...new Set([...modelSlots, ...selected])];
-  container.innerHTML = `<form class="composer ${running() ? 'busy' : ''}" id="question-form">
+  container.innerHTML = `<div class="composer-panel"><form class="composer ${running() ? 'busy' : ''}" id="question-form">
     <label class="sr-only" for="question">Your research question</label>
     <textarea id="question" rows="2" maxlength="12000" placeholder="${current ? 'Ask a follow-up…' : 'Ask anything…'}" ${running() ? 'disabled' : ''}>${esc(draft)}</textarea>
-    <div class="composer-controls"><details class="research-options"><summary>${ico('settings-2')} Options${context || depth === 'deep' || fresh ? '<span class="context-dot"></span>' : ''}</summary><div class="options-panel">
+    <div class="composer-controls"><details class="research-options"><summary aria-label="Research options" title="Research options">${ico('settings-2')}<span class="options-label">Options</span>${context || depth === 'deep' || fresh ? '<span class="context-dot"></span>' : ''}</summary><div class="options-panel">
       <button type="button" class="composer-option" data-action="context" aria-label="Shared context">${ico('plus')} ${context ? 'Edit context' : 'Add context'}</button>
       <label class="depth-select">${ico('layers-3')}<select id="depth" aria-label="Research depth" ${running() ? 'disabled' : ''}><option value="standard" ${depth === 'standard' ? 'selected' : ''}>Standard research</option><option value="deep" ${depth === 'deep' ? 'selected' : ''}>Deeper research</option></select>${ico('chevron-down')}</label>
       ${current ? `<button type="button" class="fresh-toggle ${fresh ? 'on' : ''}" data-action="fresh" aria-pressed="${fresh}" title="Skip previous rounds">${ico('rotate-ccw')} Fresh round</button>` : ''}
-    </div></details>${running() ? `<button class="send-button stop" type="button" data-action="stop" aria-label="Stop research">${ico('square')}</button>` : `<button class="send-button" type="submit" aria-label="Start research" ${sending ? 'disabled' : ''}>${ico('arrow-up')}</button>`}</div>
+    </div></details><span class="composer-shortcut"><kbd>Enter</kbd> to ask</span>${running() ? `<button class="send-button stop" type="button" data-action="stop" aria-label="Stop research">${ico('square')}</button>` : `<button class="send-button" type="submit" aria-label="Start research" ${sending || !draft.trim() ? 'disabled' : ''}>${ico(sending ? 'loader-circle' : 'arrow-up', sending ? 'spin' : '')}</button>`}</div>
   </form>
-  <div class="model-selection" role="group" aria-label="Research models. Choose 2 to 4.">${models.map(id => `<button type="button" class="model-choice ${selected.includes(id) ? 'selected' : ''}" data-model="${esc(id)}" aria-pressed="${selected.includes(id)}" aria-label="${esc(identity(id).name)} — ${esc(id)}" title="${esc(id)}" ${running() ? 'disabled' : ''}>${modelChip(id)}<span class="choice-check">${ico('check')}</span></button>`).join('')}<button class="manage-models" data-action="settings" aria-label="Manage models" title="Manage models">${ico('plus')}</button><span class="selection-count" aria-live="polite">${selected.length} selected</span></div>`;
+  <div class="model-selection" role="group" aria-label="Research models. Choose 2 to 4.">${models.map(id => `<button type="button" class="model-choice ${selected.includes(id) ? 'selected' : ''}" data-model="${esc(id)}" aria-pressed="${selected.includes(id)}" aria-label="${esc(identity(id).name)} — ${esc(id)}" title="${esc(id)}" ${running() ? 'disabled' : ''}>${modelChip(id)}<span class="choice-check">${ico('check')}</span></button>`).join('')}<button class="manage-models" data-action="settings" aria-label="Manage models" title="Manage models">${ico('plus')}</button><span class="selection-count" aria-live="polite">${selected.length} researchers selected</span></div></div>`;
   const textarea = container.querySelector('textarea');
   textarea.style.height = `${Math.min(textarea.scrollHeight, 190)}px`;
   decorate();
 }
 function renderDesk() {
   const desk = document.querySelector('#desk');
+  const researchOpen = desk.querySelector('.research-details')?.open;
   if (!current) {
     desk.innerHTML = `<section class="welcome"><h1>What would you like to know?</h1></section>`;
     decorate();
@@ -148,7 +150,7 @@ function renderDesk() {
   const count = sourceList().length;
   const finished = Object.keys(current.reports).length;
   const isDemo = current.request.demo;
-  desk.innerHTML = `<section class="conversation"><div class="conversation-main"><div class="round-history">${rounds.filter(r => r.id !== current.id).map((r, i) => `<button data-round="${r.id}"><span>Round ${i+1}</span>${esc(r.request.question)}${ico('chevron-right')}</button>`).join('')}</div><div class="question-meta">${isDemo ? `${ico('flask-conical')} Demo walkthrough` : `${ico('message-square')} Your question`}<span>${current.request.depth === 'deep' ? 'Deeper research' : 'Standard research'}</span></div><h1 class="question-title">${esc(current.request.question)}</h1>${isDemo ? `<div class="demo-banner">${ico('flask-conical')}<span>Sample findings, not a researched answer to your question. <button data-action="settings">Connect your keys</button> to start live research.</span></div>` : ''}<div class="tabbar" role="tablist" aria-label="Research views">${[['answer', 'Combined answer', ''], ['disagreements', 'Comparison', current.comparison ? current.comparison.disagreements.length : ''], ['originals', 'Originals', finished], ['sources', 'Sources', count]].map(([id, text, n]) => `<button role="tab" id="tab-${id}" aria-selected="${activeTab === id}" aria-controls="tab-content" tabindex="${activeTab === id ? 0 : -1}" class="tab ${activeTab === id ? 'active' : ''}" data-tab="${id}">${text}${n !== '' ? `<span>${n}</span>` : ''}</button>`).join('')}</div><div id="tab-content" role="tabpanel" aria-labelledby="tab-${activeTab}">${tabContent()}</div><div class="answer-actions">${current.comparison ? `<button data-action="copy">${ico('copy')} Copy answer</button>` : ''}<a href="/api/runs/${current.id}/export" download>${ico('download')} Export round</a>${!running() ? `<span>${isDemo ? 'Sample data' : `${totalUsage().toLocaleString()} tokens reported`}</span>` : ''}</div><details class="research-details"><summary>Research activity <span>${finished}/${current.request.models.length} models finished</span>${ico('chevron-down')}</summary><div class="research-sidebar">${researchSidebar()}</div></details></div></section>`;
+  desk.innerHTML = `<section class="conversation"><div class="conversation-main"><div class="round-history">${rounds.filter(r => r.id !== current.id).map((r, i) => `<button data-round="${r.id}"><span>Round ${i+1}</span>${esc(r.request.question)}${ico('chevron-right')}</button>`).join('')}</div><div class="question-meta">${isDemo ? `${ico('flask-conical')} Demo walkthrough` : `${ico('message-square')} Your question`}<span>${current.request.depth === 'deep' ? 'Deeper research' : 'Standard research'}</span></div><h1 class="question-title">${esc(current.request.question)}</h1>${isDemo ? `<div class="demo-banner">${ico('flask-conical')}<span>Sample findings, not a researched answer to your question. <button data-action="settings">Connect your keys</button> to start live research.</span></div>` : ''}<div class="tabbar" role="tablist" aria-label="Research views">${[['answer', 'Combined answer', ''], ['disagreements', 'Comparison', current.comparison ? current.comparison.disagreements.length : ''], ['originals', 'Originals', finished], ['sources', 'Sources', count]].map(([id, text, n]) => `<button role="tab" id="tab-${id}" aria-selected="${activeTab === id}" aria-controls="tab-content" tabindex="${activeTab === id ? 0 : -1}" class="tab ${activeTab === id ? 'active' : ''}" data-tab="${id}">${text}${n !== '' ? `<span>${n}</span>` : ''}</button>`).join('')}</div><div id="tab-content" role="tabpanel" aria-labelledby="tab-${activeTab}">${tabContent()}</div><div class="answer-actions">${current.comparison ? `<button data-action="copy">${ico('copy')} Copy answer</button>` : ''}<a href="/api/runs/${current.id}/export" download>${ico('download')} Export round</a>${!running() ? `<span>${isDemo ? 'Sample data' : `${totalUsage().toLocaleString()} tokens reported`}</span>` : ''}</div><details class="research-details" ${(researchOpen ?? running()) ? 'open' : ''}><summary>Research activity <span>${finished}/${current.request.models.length} models finished</span>${ico('chevron-down')}</summary><div class="research-sidebar">${researchSidebar()}</div></details></div></section>`;
   decorate();
 }
 function tabContent() {
@@ -226,6 +228,7 @@ async function submit(question) {
   if (running() || sending || !question.trim()) return;
   if (!demo && !Object.values(config.keys).every(Boolean)) { notify('Connect both providers to start live research.'); openSettings(); return; }
   sending = true;
+  renderComposer();
   try {
     const request = { question: question.trim(), context, models: selected, judge, demo, depth, fresh, session_id: sessionId, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone };
     const result = await post('/api/runs', request);
@@ -241,7 +244,7 @@ async function submit(question) {
     connect(result.run_id);
     refreshSessions();
     document.querySelector('#desk').scrollTop = 0;
-  } catch (error) { notify(error.message); } finally { sending = false; }
+  } catch (error) { notify(error.message); } finally { sending = false; renderComposer(); }
 }
 async function loadSession(id) {
   try {
@@ -355,7 +358,7 @@ document.addEventListener('click', async e => {
   }
 });
 document.addEventListener('submit', e => { if (e.target.id === 'question-form') { e.preventDefault(); submit(document.querySelector('#question').value); } });
-document.addEventListener('input', e => { if (e.target.id === 'question') { draft = e.target.value; e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 190)}px`; } });
+document.addEventListener('input', e => { if (e.target.id === 'question') { draft = e.target.value; e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 190)}px`; const send = document.querySelector('.send-button:not(.stop)'); if (send) send.disabled = sending || !draft.trim(); } });
 document.addEventListener('change', e => { if (e.target.id === 'depth') { depth = e.target.value; savePrefs(); } });
 window.addEventListener('resize', syncNavigation);
 document.addEventListener('keydown', e => {
