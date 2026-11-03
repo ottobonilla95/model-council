@@ -100,7 +100,7 @@ function shell() {
       <div class="history-heading">Your conversations</div>
       <nav class="history" aria-label="Saved conversations">${sessions.length ? sessions.map(s => `<button class="history-item ${s.id === sessionId ? 'selected' : ''}" data-session="${s.id}" title="${esc(s.title)}">${ico('message-square')}<span>${esc(s.title)}</span></button>`).join('') : `<p class="history-empty">A place for your questions.<br>Your conversations appear here.</p>`}</nav>
       <div class="sidebar-bottom">
-        <div class="local-note"><span class="local-dot"></span><div>Saved on your computer<small>Questions, answers, and sources</small></div></div>
+        <div class="local-note"><span class="local-dot"></span><div>${config.managed_credentials ? 'Saved in your private workspace' : 'Saved on your computer'}<small>Questions, answers, and sources</small></div></div>
         <button class="settings-nav" data-action="settings">${ico('settings-2')} Settings <span class="connection-count">${Object.values(config.keys).filter(Boolean).length}/2 keys saved</span></button>
       </div>
     </aside>
